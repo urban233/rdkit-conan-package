@@ -39,7 +39,6 @@ Before using this Conan package, ensure you have the following installed:
    cmake --version
    ```
 4. **Compiler** – a C++14 compatible compiler (e.g., GCC, Clang, MSVC).
-5. **Optional:** CUDA toolkit if you want GPU support.
 
 ---
 
