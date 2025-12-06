@@ -12,7 +12,6 @@ This repository provides a **Conan package** for the [RDKit](https://github.com/
 * [Prerequisites](#prerequisites)
 * [Installation](#installation)
 * [Building the Package](#building-the-package)
-* [Optional GPU Support](#optional-gpu-support)
 * [Using the Package in Other Projects](#using-the-package-in-other-projects)
 * [License](#license)
 
