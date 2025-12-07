@@ -4,7 +4,7 @@ import shutil
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps, cmake_layout
 from conan.tools.env import VirtualRunEnv
-from conan.tools.files import get
+from conan.tools.files import get, copy
 
 
 class RDKitConan(ConanFile):
@@ -177,6 +177,13 @@ class RDKitConan(ConanFile):
 
     if os.path.exists(include_src):
       os.rmdir(include_src)
+
+    # Move DLLs from lib/ to bin/
+    lib_dir = os.path.join(self.package_folder, "lib")
+    bin_dir = os.path.join(self.package_folder, "bin")
+    os.makedirs(bin_dir, exist_ok=True)
+
+    copy(self, "*.dll", src=lib_dir, dst=bin_dir, keep_path=False)
 
 
   def package_info(self):
