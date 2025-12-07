@@ -6,6 +6,7 @@ from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps, cmake_layout
 from conan.tools.env import VirtualRunEnv
 from conan.tools.files import get
 
+
 class RDKitConan(ConanFile):
   name = "rdkit"
   version = "2025.09.3"
@@ -71,7 +72,8 @@ class RDKitConan(ConanFile):
     tc = CMakeToolchain(self)
     # Mirrors .azure-pipelines/vs_build_dll.yml
     tc.variables["CMAKE_BUILD_TYPE"] = "Release"
-    tc.variables["RDK_INSTALL_INTREE"] = "ON"
+    tc.variables["RDK_INSTALL_INTREE"] = "OFF"  # So that the package folder is used
+    tc.variables["CMAKE_INSTALL_PREFIX"] = self.package_folder.replace("\\", "/")  # <-- ensures install goes to package folder
     tc.variables["RDK_INSTALL_STATIC_LIBS"] = "OFF"
     tc.variables["RDK_INSTALL_DLLS_MSVC"] = "ON"
     tc.variables["RDK_BUILD_CPP_TESTS"] = "ON"
@@ -141,20 +143,6 @@ class RDKitConan(ConanFile):
     # Build internal RDKit libraries first, sequentially to avoid race conditions on Windows
 
     cmake.build(cli_args=["--target", "install", "--", "/m:1"])
-    # Create temporary build environment for RDKit tests
-    # env = Environment()
-    # env.define("RDBASE", self.source_folder)
-    # env.define("RDBase", self.source_folder)
-    # env.prepend_path("PATH", f"{self.build_folder}")  # where DLLs are
-    # env.prepend_path("PATH", f"{self.build_folder}/bin/Release")
-    #
-    # # --- Include dependency run environment ---
-    # run_env = VirtualRunEnv(self)
-    # run_env.generate()
-    #
-    # envvars = env.vars(self)
-    #
-    # with envvars.apply():
 
     if self.options.with_ctest:
       run_env = VirtualRunEnv(self)
@@ -174,9 +162,124 @@ class RDKitConan(ConanFile):
         )
 
   def package(self):
-    # Package is already installed in build() via cmake.install()
-    cmake = CMake(self)
-    cmake.install()
+    include_src = os.path.join(self.package_folder, "include", "rdkit")
+    include_dst = os.path.join(self.package_folder, "include")
+    os.makedirs(include_dst, exist_ok=True)
+
+    # Move all files from rdkit/ to include/
+    for item in os.listdir(include_src):
+      s = os.path.join(include_src, item)
+      d = os.path.join(include_dst, item)
+      if os.path.isdir(s):
+        shutil.move(s, d)
+      else:
+        shutil.move(s, include_dst)
+
+    if os.path.exists(include_src):
+      os.rmdir(include_src)
+
 
   def package_info(self):
-    self.cpp_info.libs = ["RDKit"]
+    self.cpp_info.set_property("cmake_file_name", "RDKit")
+    libs = [
+      "Abbreviations",
+      "Alignment",
+      "AvalonLib",
+      "avalon_clib",
+      "Catalogs",
+      "ChemDraw",
+      "ChemicalFeatures",
+      "ChemReactions",
+      "ChemTransforms",
+      "CIPLabeler",
+      # "ConformerParser",  # missing in manifest
+      "coordgen",
+      "DataStructs",
+      "Depictor",
+      "Deprotect",
+      "Descriptors",
+      "DetermineBonds",
+      "DistGeometry",
+      "DistGeomHelpers",
+      "EHTLib",
+      "EigenSolvers",
+      "EnumerateStereoisomers",
+      "FileParsers",
+      "FilterCatalog",
+      "Fingerprints",
+      "FMCS",
+      "ForceField",
+      "ForceFieldHelpers",
+      "FragCatalog",
+      "FreeSASALib",
+      "freesasa_clib",
+      "ga",
+      "GeneralizedSubstruct",
+      "GenericGroups",
+      "GraphMol",
+      "hc",
+      "Inchi",
+      "InfoTheory",
+      "maeparser",
+      "MarvinParser",
+      "MMPA",
+      "MolAlign",
+      "MolCatalog",
+      "MolChemicalFeatures",
+      "MolDraw2D",
+      "MolEnumerator",
+      "MolHash",
+      "MolInteractionFields",
+      "MolInterchange",
+      "MolProcessing",
+      "MolStandardize",
+      "MolTransforms",
+      "O3AAlign",
+      "Optimizer",
+      "PartialCharges",
+      "PubChemShape",
+      "pubchem_align3d",
+      "RascalMCES",
+      "RDChemDrawLib",
+      "RDChemDrawReactionLib",
+      "RDGeneral",
+      "RDGeometryLib",
+      "RDInchiLib",
+      # "rdkit_base",       # missing in manifest
+      # "rdkit_py_base",    # missing in manifest
+      "RDStreams",
+      "ReducedGraphs",
+      "RGroupDecomposition",
+      "RingDecomposerLib",
+      "ScaffoldNetwork",
+      "ShapeHelpers",
+      "SimDivPickers",
+      "SLNParse",
+      "SmilesParse",
+      "Subgraphs",
+      "SubstructLibrary",
+      "SubstructMatch",
+      "SynthonSpaceSearch",
+      "TautomerQuery",
+      "Trajectory"
+      # "yaehmop_eht"      # missing in manifest
+    ]
+    deps = [
+      "boost::boost",
+      "zlib::zlib",
+      "sqlite3::sqlite3",
+    ]
+    if self.options.with_cairo:
+      deps.append("cairo::cairo")
+    if self.options.with_eigen:
+      deps.append("eigen::eigen")
+    if self.options.with_python:
+      deps.append("numpy::numpy")
+
+    # Create a component for each RDKit sub-library
+    for name in libs:
+      comp = self.cpp_info.components[name]
+      comp.libs = [f"RDKit{name}"]
+      comp.set_property("cmake_target_name", f"RDKit::{name}")
+      # Each RDKit component depends on the common external packages
+      comp.requires = deps.copy()
