@@ -9,4 +9,4 @@ compiler.version=194
 os=Windows
 
 [options]
-rdkit:with_ctest=True
+rdkit/*:with_ctest=True

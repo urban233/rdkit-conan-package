@@ -8,4 +8,4 @@ compiler.cppstd=14
 os=Linux
 
 [options]
-rdkit:with_ctest=False
+rdkit/*:with_ctest=False
