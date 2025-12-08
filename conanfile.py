@@ -2,20 +2,32 @@ import os
 import shutil
 
 from conan import ConanFile
-from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps, cmake_layout
+from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
 from conan.tools.env import VirtualRunEnv
-from conan.tools.files import get, copy
+from conan.tools.files import copy, get
 
 
 class RDKitConan(ConanFile):
+  """Conan recipe for RDKit.
+
+  RDKit is a collection of cheminformatics and machine-learning software
+  written in C++ and Python. This recipe handles the complex build configuration
+  required for RDKit, including various optional support libraries and
+  platform-specific build flags.
+  """
+
   name = "rdkit"
   version = "2025.09.3"
   license = "BSD-3-Clause"
   url = "https://github.com/rdkit/rdkit"
-  description = "The RDKit is a collection of cheminformatics and machine-learning software written in C++ and Python."
+  description = (
+    "The RDKit is a collection of cheminformatics and machine-learning "
+    "software written in C++ and Python."
+  )
   topics = ("chemistry", "cheminformatics", "c++", "python", "molecule")
 
   settings = "os", "compiler", "build_type", "arch"
+
   options = {
     "shared": [True, False],
     "with_python": [True, False],
@@ -24,6 +36,7 @@ class RDKitConan(ConanFile):
     "with_eigen": [True, False],
     "with_ctest": [True, False],
   }
+
   default_options = {
     "shared": False,
     "with_python": False,
@@ -36,20 +49,27 @@ class RDKitConan(ConanFile):
   exports_sources = "CMakeLists.txt"
 
   def source(self):
-    get(self,
-        url=f"https://github.com/rdkit/rdkit/archive/refs/tags/Release_{self.version.replace('.', '_')}.zip",
-        strip_root=True)
-    # fixme: A .patch file would be the more elegant solution
-    shutil.copyfile(
-      os.path.join(
-        self.export_sources_folder, "CMakeLists.txt"
+    """Retrieves and prepares the source code."""
+    # Download source code based on the version tag.
+    get(
+      self,
+      url=(
+        f"https://github.com/rdkit/rdkit/archive/refs/tags/"
+        f"Release_{self.version.replace('.', '_')}.zip"
       ),
-      os.path.join(
-        self.source_folder, "CMakeLists.txt"
-      )
+      strip_root=True
+    )
+
+    # Overwrite the root CMakeLists.txt with the exported version.
+    # TODO: Consider replacing this file replacement strategy with a patch file
+    # for more robust source management.
+    shutil.copyfile(
+      os.path.join(self.export_sources_folder, "CMakeLists.txt"),
+      os.path.join(self.source_folder, "CMakeLists.txt")
     )
 
   def layout(self):
+    """Defines the standard CMake layout for the project."""
     cmake_layout(
       self,
       src_folder="src",
@@ -57,23 +77,33 @@ class RDKitConan(ConanFile):
     )
 
   def configure(self):
+    """Configures build options and dependency flags."""
     if self.options.shared:
       self.options.rm_safe("fPIC")
 
-    # Propagate options to Boost here so the correct binary is downloaded/built
+    # Propagate options to Boost to ensure binary compatibility.
+    # RDKit typically requires specific Boost components to be present
+    # and linked dynamically.
     self.options["boost"].shared = True
     self.options["boost"].without_iostreams = False
     self.options["boost"].without_zlib = False
-    self.options["boost"].without_serialization = False # RDKit usually needs this too
+    self.options["boost"].without_serialization = False  # Required by RDKit
     self.options["boost"].without_system = False
 
   def generate(self):
-    # CMake toolchain
+    """Generates the build toolchains and dependency files."""
+    # --- CMake Toolchain Configuration ---
     tc = CMakeToolchain(self)
-    # Mirrors .azure-pipelines/vs_build_dll.yml
+
+    # Configuration mirrors the official Azure Pipelines build definition
+    # (specifically .azure-pipelines/vs_build_dll.yml).
     tc.variables["CMAKE_BUILD_TYPE"] = "Release"
-    tc.variables["RDK_INSTALL_INTREE"] = "OFF"  # So that the package folder is used
-    tc.variables["CMAKE_INSTALL_PREFIX"] = self.package_folder.replace("\\", "/")  # <-- ensures install goes to package folder
+    tc.variables["RDK_INSTALL_INTREE"] = "OFF"  # Enforce use of package folder
+
+    # Normalize path separators to ensure CMake handles the install prefix correctly
+    tc.variables["CMAKE_INSTALL_PREFIX"] = self.package_folder.replace("\\", "/")
+
+    # RDKit Build Flags
     tc.variables["RDK_INSTALL_STATIC_LIBS"] = "OFF"
     tc.variables["RDK_INSTALL_DLLS_MSVC"] = "ON"
     tc.variables["RDK_BUILD_CPP_TESTS"] = "ON"
@@ -93,31 +123,31 @@ class RDKitConan(ConanFile):
     tc.variables["RDK_SWIG_STATIC"] = "OFF"
     tc.variables["RDK_TEST_MULTITHREADED"] = "ON"
 
-    # 1. Remove MSVC runtime enforcement (use default VS runtime)
+    # 1. Remove MSVC runtime enforcement to allow usage of the default VS runtime.
     if "CMAKE_MSVC_RUNTIME_LIBRARY" in tc.cache_variables:
       del tc.cache_variables["CMAKE_MSVC_RUNTIME_LIBRARY"]
 
-    # 2. Remove parallel /MP flags added by Conan
+    # 2. Remove parallel compilation flags (/MP) automatically added by Conan.
     tc.cache_variables.pop("CONAN_CXX_FLAGS", None)
     tc.cache_variables.pop("CONAN_C_FLAGS", None)
 
     tc.generate()
 
-    # CMakeDeps for dependencies
+    # --- CMake Dependency Configuration ---
     deps = CMakeDeps(self)
 
-    # Eigen
+    # Configure Eigen
     deps.set_property("eigen", "cmake_file_name", "Eigen3")
     deps.set_property("eigen", "cmake_target_name", "Eigen3::Eigen")
     tc.cache_variables["EIGEN3_FOUND"] = True
 
-    # Zlib / BZip2
+    # Configure Zlib / BZip2
     deps.set_property("zlib", "cmake_file_name", "ZLIB")
     deps.set_property("zlib", "cmake_target_name", "ZLIB::ZLIB")
     deps.set_property("bzip2", "cmake_file_name", "BZip2")
     deps.set_property("bzip2", "cmake_target_name", "BZip2::BZip2")
 
-    # Cairo / Freetype
+    # Configure Cairo / Freetype
     deps.set_property("cairo", "cmake_file_name", "Cairo")
     deps.set_property("cairo", "cmake_target_name", "Cairo::Cairo")
     deps.set_property("freetype", "cmake_file_name", "Freetype")
@@ -126,9 +156,11 @@ class RDKitConan(ConanFile):
     deps.generate()
 
   def requirements(self):
+    """Defines the package dependencies."""
     self.requires("boost/1.89.0")
     self.requires("zlib/1.3.1")
     self.requires("sqlite3/3.51.0")
+
     if self.options.with_cairo:
       self.requires("cairo/1.18.0")
     if self.options.with_eigen:
@@ -137,57 +169,67 @@ class RDKitConan(ConanFile):
       self.requires("numpy/1.26.0")
 
   def build(self):
+    """Builds the project using CMake."""
     cmake = CMake(self)
     cmake.configure()
-    # cmake.build()
-    # Build internal RDKit libraries first, sequentially to avoid race conditions on Windows
 
+    # Build internal RDKit libraries sequentially.
+    # This is critical on Windows to avoid race conditions during the build process.
+    # We target 'install' directly with single-process execution (/m:1).
     cmake.build(cli_args=["--target", "install", "--", "/m:1"])
 
     if self.options.with_ctest:
-      run_env = VirtualRunEnv(self)
-      env = run_env.environment()
+      self._run_tests()
 
-      # Add RDKit-specific paths
-      env.define("RDBASE", self.source_folder)
-      env.define("RDBase", self.source_folder)
-      env.prepend_path("PATH", f"{self.build_folder}")
-      env.prepend_path("PATH", f"{self.build_folder}/bin/Release")
+  def _run_tests(self):
+    """Executes the test suite using CTest."""
+    run_env = VirtualRunEnv(self)
+    env = run_env.environment()
 
-      with env.vars(self).apply():
-        self.run(
-          #f"ctest -C Release --output-on-failure -T Test",
-          f"ctest -C Release --output-on-failure",
-          cwd=self.build_folder,
-        )
+    # Define RDKit-specific environment variables for the test runner.
+    env.define("RDBASE", self.source_folder)
+    env.define("RDBase", self.source_folder)
+    env.prepend_path("PATH", f"{self.build_folder}")
+    env.prepend_path("PATH", f"{self.build_folder}/bin/Release")
+
+    with env.vars(self).apply():
+      self.run(
+        "ctest -C Release --output-on-failure",
+        cwd=self.build_folder,
+      )
 
   def package(self):
+    """Packages the artifacts, reorganizing headers and binaries."""
     include_src = os.path.join(self.package_folder, "include", "rdkit")
     include_dst = os.path.join(self.package_folder, "include")
     os.makedirs(include_dst, exist_ok=True)
 
-    # Move all files from rdkit/ to include/
+    # Consolidate headers: Move all files from include/rdkit/ to include/
     for item in os.listdir(include_src):
-      s = os.path.join(include_src, item)
-      d = os.path.join(include_dst, item)
-      if os.path.isdir(s):
-        shutil.move(s, d)
+      src_path = os.path.join(include_src, item)
+      dst_path = os.path.join(include_dst, item)
+      if os.path.isdir(src_path):
+        shutil.move(src_path, dst_path)
       else:
-        shutil.move(s, include_dst)
+        shutil.move(src_path, include_dst)
 
     if os.path.exists(include_src):
       os.rmdir(include_src)
 
-    # Move DLLs from lib/ to bin/
+    # Move DLLs from lib/ to bin/ for Windows runtime compatibility.
     lib_dir = os.path.join(self.package_folder, "lib")
     bin_dir = os.path.join(self.package_folder, "bin")
     os.makedirs(bin_dir, exist_ok=True)
 
     copy(self, "*.dll", src=lib_dir, dst=bin_dir, keep_path=False)
 
-
   def package_info(self):
+    """Defines the package information for consumers."""
     self.cpp_info.set_property("cmake_file_name", "RDKit")
+
+    # List of RDKit component libraries.
+    # Note: Some libraries (ConformerParser, rdkit_base, rdkit_py_base, yaehmop_eht)
+    # are missing from the manifest.
     libs = [
       "Abbreviations",
       "Alignment",
@@ -199,7 +241,6 @@ class RDKitConan(ConanFile):
       "ChemReactions",
       "ChemTransforms",
       "CIPLabeler",
-      # "ConformerParser",  # missing in manifest
       "coordgen",
       "DataStructs",
       "Depictor",
@@ -252,8 +293,6 @@ class RDKitConan(ConanFile):
       "RDGeneral",
       "RDGeometryLib",
       "RDInchiLib",
-      # "rdkit_base",       # missing in manifest
-      # "rdkit_py_base",    # missing in manifest
       "RDStreams",
       "ReducedGraphs",
       "RGroupDecomposition",
@@ -269,13 +308,14 @@ class RDKitConan(ConanFile):
       "SynthonSpaceSearch",
       "TautomerQuery",
       "Trajectory"
-      # "yaehmop_eht"      # missing in manifest
     ]
+
     deps = [
       "boost::boost",
       "zlib::zlib",
       "sqlite3::sqlite3",
     ]
+
     if self.options.with_cairo:
       deps.append("cairo::cairo")
     if self.options.with_eigen:
@@ -283,10 +323,10 @@ class RDKitConan(ConanFile):
     if self.options.with_python:
       deps.append("numpy::numpy")
 
-    # Create a component for each RDKit sub-library
+    # Create a CMake component for each RDKit sub-library.
     for name in libs:
       comp = self.cpp_info.components[name]
       comp.libs = [f"RDKit{name}"]
       comp.set_property("cmake_target_name", f"RDKit::{name}")
-      # Each RDKit component depends on the common external packages
+      # Each RDKit component depends on the common external packages.
       comp.requires = deps.copy()

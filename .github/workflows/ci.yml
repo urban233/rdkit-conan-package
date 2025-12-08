@@ -1,0 +1,103 @@
+name: ci.yml
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-linux:
+    name: Build on Linux
+    runs-on: ubuntu-22.04
+    env:
+      CONAN_USER_HOME: ${{ runner.temp }}/conan
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install Conan and build tools
+        run: |
+          pip install --upgrade conan
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build
+
+      - name: Conan install
+        run: conan install . --build=missing
+
+      - name: Build package
+        run: conan build . --profile profiles/linux_release
+
+      - name: Upload Conan artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: conan-package-linux
+          path: conan_package
+
+  build-windows:
+    name: Build on Windows
+    runs-on: windows-2022
+    env:
+      CONAN_USER_HOME: ${{ runner.temp }}\conan
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install Conan and build tools
+        run: |
+          pip install --upgrade conan
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' --yes
+          choco install ninja --yes
+
+      - name: Conan install
+        run: conan install . --build=missing
+
+      - name: Build package
+        run: conan build . --profile profiles/windows_release
+
+      - name: Upload Conan artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: conan-package-windows
+          path: conan_package
+
+  build-macos:
+    name: Build on macOS
+    runs-on: macos-13
+    env:
+      CONAN_USER_HOME: ${{ runner.temp }}/conan
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install Conan and build tools
+        run: |
+          pip install --upgrade conan
+          brew install cmake ninja
+
+      - name: Conan install
+        run: conan install . --build=missing
+
+      - name: Build package
+        run: conan build . --profile profiles/macos_release
+
+      - name: Upload Conan artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: conan-package-macos
+          path: conan_package

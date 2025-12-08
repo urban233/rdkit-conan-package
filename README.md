@@ -76,8 +76,7 @@ conan install rdkit/2025.09.03
 Include the generated files in your CMake project:
 
 ```cmake
-include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-conan_basic_setup()
+find_package(RDKit REQUIRED)
 ```
 
 ---
