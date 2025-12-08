@@ -103,7 +103,7 @@ class RDKitConan(ConanFile):
 
     if self.package_folder is None:
       tmp_path = pathlib.Path(self.source_folder)
-      tc.variables["CMAKE_INSTALL_PREFIX"] = pathlib.Path(tmp_path / ".." / "install")
+      tc.variables["CMAKE_INSTALL_PREFIX"] = str(pathlib.Path(tmp_path / ".." / "install")).replace("\\", "/")
     else:
       # Normalize path separators to ensure CMake handles the install prefix correctly
       tc.variables["CMAKE_INSTALL_PREFIX"] = self.package_folder.replace("\\", "/")
@@ -181,7 +181,8 @@ class RDKitConan(ConanFile):
     # Build internal RDKit libraries sequentially.
     # This is critical on Windows to avoid race conditions during the build process.
     # We target 'install' directly with single-process execution (/m:1).
-    cmake.build(cli_args=["--target", "install", "--", "/m:1"])
+    # cmake.build(cli_args=["--target", "install", "--", "/m:1"])
+    cmake.build(cli_args=["--target", "install"])
 
     if self.options.with_ctest:
       self._run_tests()
