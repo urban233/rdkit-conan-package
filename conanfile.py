@@ -1,4 +1,5 @@
 import os
+import pathlib
 import shutil
 
 from conan import ConanFile
@@ -100,8 +101,12 @@ class RDKitConan(ConanFile):
     tc.variables["CMAKE_BUILD_TYPE"] = "Release"
     tc.variables["RDK_INSTALL_INTREE"] = "OFF"  # Enforce use of package folder
 
-    # Normalize path separators to ensure CMake handles the install prefix correctly
-    tc.variables["CMAKE_INSTALL_PREFIX"] = self.package_folder.replace("\\", "/")
+    if self.package_folder is None:
+      tmp_path = pathlib.Path(self.source_folder)
+      tc.variables["CMAKE_INSTALL_PREFIX"] = pathlib.Path(tmp_path / ".." / "install")
+    else:
+      # Normalize path separators to ensure CMake handles the install prefix correctly
+      tc.variables["CMAKE_INSTALL_PREFIX"] = self.package_folder.replace("\\", "/")
 
     # RDKit Build Flags
     tc.variables["RDK_INSTALL_STATIC_LIBS"] = "OFF"
