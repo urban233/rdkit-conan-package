@@ -44,6 +44,9 @@ jobs:
       - name: Create Conan default profile
         run: conan profile detect --force
 
+      - name: Get the sources from GitHub
+        run: conan source
+
       - name: Conan install
         run: |
           conan install . --build=missing --profile profiles/linux_release \
@@ -83,6 +86,9 @@ jobs:
       - name: Create Conan default profile
         run: conan profile detect --force
 
+      - name: Get the sources from GitHub
+        run: conan source
+
       - name: Conan install
         run: conan install . --build=missing --profile profiles/windows_release
 
@@ -117,6 +123,9 @@ jobs:
 
       - name: Create Conan default profile
         run: conan profile detect --force
+
+      - name: Get the sources from GitHub
+        run: conan source
 
       - name: Conan install
         run: conan install . --build=missing --profile profiles/macos_release
