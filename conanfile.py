@@ -111,12 +111,13 @@ class RDKitConan(ConanFile):
     tc.variables["RDK_INSTALL_INTREE"] = "OFF"  # Enforce use of package folder
 
     # Normalize path separators to ensure CMake handles the install prefix correctly
+    tmp_source_path = pathlib.Path(self.source_folder)
     if self.options.ci:
-      tmp_install_path = pathlib.Path(self.source_folder / "install")
+      tmp_install_path = pathlib.Path(tmp_source_path / "install")
       os.makedirs(tmp_install_path, exist_ok=True)
       tc.variables["CMAKE_INSTALL_PREFIX"] = str(tmp_install_path).replace("\\", "/")
     elif self.package_folder is None:
-      tc.variables["CMAKE_INSTALL_PREFIX"] = str(pathlib.Path(self.source_folder / ".." / "install")).replace("\\", "/")
+      tc.variables["CMAKE_INSTALL_PREFIX"] = str(pathlib.Path(tmp_source_path / ".." / "install")).replace("\\", "/")
     else:
       tc.variables["CMAKE_INSTALL_PREFIX"] = self.package_folder.replace("\\", "/")
 
