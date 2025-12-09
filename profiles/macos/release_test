@@ -1,11 +1,11 @@
 [settings]
-arch=x86_64
+arch=armv8
 build_type=Release
 compiler=apple-clang
-compiler.version=14.0
+compiler.cppstd=gnu17
 compiler.libcxx=libc++
-compiler.cppstd=14
+compiler.version=15
 os=Macos
 
 [options]
-rdkit/*:with_ctest=False
+rdkit/*:with_ctest=True

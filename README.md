@@ -47,7 +47,7 @@ Clone this repository:
 
 ```bash
 git clone https://github.com/urban233/rdkit-conan-package.git
-cd rdkit-conan
+cd rdkit-conan-package
 ```
 
 ---
@@ -79,14 +79,11 @@ Include the generated files in your CMake project:
 find_package(RDKit REQUIRED)
 ```
 
+A good starting point, on how to use this Conan package is the 
+[rdkit-cpp-example-template](https://github.com/urban233/rdkit-conan-package) GitHub repository.
+
 ---
 
 ## License
 
 This project is licensed under the **BSD License** – see the [LICENSE](https://github.com/rdkit/rdkit/blob/master/LICENSE) file for details.
-
----
-
-✅ **Notes:**
-
-* Always verify that your Python and Conan versions meet the minimum requirements.

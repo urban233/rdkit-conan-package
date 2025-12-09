@@ -49,17 +49,18 @@ jobs:
 
       - name: Conan install
         run: |
-          conan install . --build=missing --profile profiles/linux_release \
+          conan install . --build=missing --profile profiles/linux/release_ci \
             -c tools.system.package_manager:mode=install \
             -c tools.system.package_manager:sudo=True
 
       - name: Build package
-        run: conan build . --profile profiles/linux_release
+        run: conan build . --profile profiles/linux/release_ci
 
       - name: Upload Conan artifacts
         uses: actions/upload-artifact@v4
         with:
           name: conan-package-linux
+          # TODO: Fix the artifact path: it should be under repo_root/src/install
           path: conan_package
 
   build-windows:
@@ -90,15 +91,16 @@ jobs:
         run: conan source
 
       - name: Conan install
-        run: conan install . --build=missing --profile profiles/windows_release
+        run: conan install . --build=missing --profile profiles/windows/release_ci
 
       - name: Build package
-        run: conan build . --profile profiles/windows_release
+        run: conan build . --profile profiles/windows/release_ci
 
       - name: Upload Conan artifacts
         uses: actions/upload-artifact@v4
         with:
           name: conan-package-windows
+          # TODO: Fix the artifact path: it should be under repo_root/src/install
           path: conan_package
 
   build-macos:
@@ -128,13 +130,14 @@ jobs:
         run: conan source
 
       - name: Conan install
-        run: conan install . --build=missing --profile profiles/macos_release
+        run: conan install . --build=missing --profile profiles/macos/release_ci
 
       - name: Build package
-        run: conan build . --profile profiles/macos_release
+        run: conan build . --profile profiles/macos/release_ci
 
       - name: Upload Conan artifacts
         uses: actions/upload-artifact@v4
         with:
           name: conan-package-macos
+          # TODO: Fix the artifact path: it should be under repo_root/src/install
           path: conan_package

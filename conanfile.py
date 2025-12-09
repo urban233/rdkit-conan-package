@@ -1,3 +1,9 @@
+# ----------------------------------------------------------------------------#
+# This file contains source code for the Conan RDKit package
+# copyright (c) 2025 by Martin Urban.
+# It is unlawful to modify or remove this copyright notice.
+# Please see the accompanying LICENSE file for further information.
+# ----------------------------------------------------------------------------#
 import os
 import pathlib
 import shutil
@@ -35,7 +41,9 @@ class RDKitConan(ConanFile):
     "with_inchi": [True, False],
     "with_cairo": [True, False],
     "with_eigen": [True, False],
+    # Conan specific options
     "with_ctest": [True, False],
+    "ci": [True, False],
   }
 
   default_options = {
@@ -44,7 +52,9 @@ class RDKitConan(ConanFile):
     "with_inchi": True,
     "with_cairo": True,
     "with_eigen": True,
+    # Conan specific options
     "with_ctest": False,
+    "ci": False
   }
 
   exports_sources = "CMakeLists.txt"
@@ -97,15 +107,17 @@ class RDKitConan(ConanFile):
     tc = CMakeToolchain(self)
 
     # Configuration mirrors the official Azure Pipelines build definition
-    # (specifically .azure-pipelines/vs_build_dll.yml).
     tc.variables["CMAKE_BUILD_TYPE"] = "Release"
     tc.variables["RDK_INSTALL_INTREE"] = "OFF"  # Enforce use of package folder
 
-    if self.package_folder is None:
-      tmp_path = pathlib.Path(self.source_folder)
-      tc.variables["CMAKE_INSTALL_PREFIX"] = str(pathlib.Path(tmp_path / ".." / "install")).replace("\\", "/")
+    # Normalize path separators to ensure CMake handles the install prefix correctly
+    if self.options.ci:
+      tmp_install_path = pathlib.Path(self.source_folder / "install")
+      os.makedirs(tmp_install_path, exist_ok=True)
+      tc.variables["CMAKE_INSTALL_PREFIX"] = str(tmp_install_path).replace("\\", "/")
+    elif self.package_folder is None:
+      tc.variables["CMAKE_INSTALL_PREFIX"] = str(pathlib.Path(self.source_folder / ".." / "install")).replace("\\", "/")
     else:
-      # Normalize path separators to ensure CMake handles the install prefix correctly
       tc.variables["CMAKE_INSTALL_PREFIX"] = self.package_folder.replace("\\", "/")
 
     # RDKit Build Flags
