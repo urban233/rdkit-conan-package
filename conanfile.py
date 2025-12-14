@@ -75,11 +75,35 @@ class RDKitConan(ConanFile):
     # Overwrite the root CMakeLists.txt with the exported version.
     # TODO: Consider replacing this file replacement strategy with a patch file
     # for more robust source management.
-    shutil.copyfile(
-      os.path.join(self.export_sources_folder, "CMakeLists.txt"),
-      os.path.join(self.source_folder, "CMakeLists.txt")
+    # shutil.copyfile(
+    #   os.path.join(self.export_sources_folder, "CMakeLists.txt"),
+    #   os.path.join(self.source_folder, "CMakeLists.txt")
+    # )
+
+    # Adding the set(Boost_USE_STATIC_LIBS ON) but only if
+    # RDK_INSTALL_DLLS_MSVC=OFF
+    replace_in_file(
+      self,
+      os.path.join(self.source_folder, "CMakeLists.txt"),
+      "# FIX: do we still need this?",
+      "# FIX: do we still need this?\nif(NOT RDK_INSTALL_DLLS_MSVC)\n  set(Boost_USE_STATIC_LIBS ON)\nendif()"
     )
 
+    # Fix the Eigen3 discovery to make it conan compatible
+    replace_in_file(
+      self,
+      os.path.join(self.source_folder, "CMakeLists.txt"),
+      "find_package(Eigen3)\nif(RDK_BUILD_DESCRIPTORS3D)",
+      "find_package(Eigen3 REQUIRED)\nif(RDK_BUILD_DESCRIPTORS3D)"
+    )
+    replace_in_file(
+      self,
+      os.path.join(self.source_folder, "CMakeLists.txt"),
+      "if(NOT EIGEN3_FOUND)",
+      "if(NOT TARGET Eigen3::Eigen)"
+    )
+
+    # Replace the ${SWIG_USE_FILE} variable for UseSWIG to make it conan compatible
     replace_in_file(
       self,
       os.path.join(self.source_folder, "Code", "JavaWrappers", "CMakeLists.txt"),
@@ -111,7 +135,7 @@ class RDKitConan(ConanFile):
     # Propagate options to Boost to ensure binary compatibility.
     # RDKit typically requires specific Boost components to be present
     # and linked dynamically.
-    self.options["boost"].shared = True
+    self.options["boost"].shared = False  # Normally true
     self.options["boost"].without_iostreams = False
     self.options["boost"].without_zlib = False
     self.options["boost"].without_serialization = False  # Required by RDKit
