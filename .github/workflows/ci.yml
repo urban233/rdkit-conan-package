@@ -7,6 +7,107 @@ on:
   pull_request:
 
 jobs:
+  build-windows:
+    name: Build on Windows
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Conan and build tools
+        run: |
+          pip install --upgrade conan
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' --yes
+          choco install ninja --yes
+
+      - name: Set Conan home
+        run: echo "CONAN_USER_HOME=${{ runner.temp }}\conan" >> $env:GITHUB_ENV
+
+      - name: Create Conan default profile
+        run: conan profile detect --force
+
+      - name: Get the sources from GitHub
+        run: conan source
+
+      - name: Conan install
+        run: conan install . --build=missing --profile profiles/windows/release
+
+      - name: Build package
+        run: conan build . --profile profiles/windows/release
+
+      - name: Create Conan package
+        run: conan create . --profile profiles/windows/release
+
+      - name: Export and package
+        run: |
+          conan export-pkg . --profile profiles/windows/release
+          conan cache path rdkit/* > package_path.txt
+          $PACKAGE_PATH = Get-Content package_path.txt | Where-Object { $_ -ne "" }
+          echo "PACKAGE_PATH=$PACKAGE_PATH" >> $env:GITHUB_ENV
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rdkit-windows-x64
+          path: ${{ env.PACKAGE_PATH }}\p
+          retention-days: 7
+          if-no-files-found: error
+
+  build-macos:
+    name: Build on macOS
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Conan and build tools
+        run: |
+          pip install --upgrade conan
+          brew install cmake ninja
+
+      - name: Set Conan home
+        run: echo "CONAN_USER_HOME=${{ runner.temp }}/conan" >> $GITHUB_ENV
+
+      - name: Create Conan default profile
+        run: conan profile detect --force
+
+      - name: Get the sources from GitHub
+        run: conan source
+
+      - name: Conan install
+        run: conan install . --build=missing --profile profiles/macos/release
+
+      - name: Build package
+        run: conan build . --profile profiles/macos/release
+
+      - name: Create Conan package
+        run: conan create . --profile profiles/macos/release
+
+      - name: Export and package
+        run: |
+          conan export-pkg . --profile profiles/macos/release
+          conan cache path rdkit/* > package_path.txt
+          PACKAGE_PATH=$(cat package_path.txt | grep -v "^$")
+          echo "PACKAGE_PATH=$PACKAGE_PATH" >> $GITHUB_ENV
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rdkit-macos-arm64
+          path: ${{ env.PACKAGE_PATH }}/p
+          retention-days: 7
+          if-no-files-found: error
+
   build-linux:
     name: Build on Linux
     runs-on: ubuntu-22.04
@@ -56,67 +157,20 @@ jobs:
       - name: Build package
         run: conan build . --profile profiles/linux/release
 
-  build-windows:
-    name: Build on Windows
-    runs-on: windows-2022
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Create Conan package
+        run: conan create . --profile profiles/linux/release
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Conan and build tools
+      - name: Export and package
         run: |
-          pip install --upgrade conan
-          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' --yes
-          choco install ninja --yes
+          conan export-pkg . --profile profiles/linux/release
+          conan cache path rdkit/* > package_path.txt
+          PACKAGE_PATH=$(cat package_path.txt | grep -v "^$")
+          echo "PACKAGE_PATH=$PACKAGE_PATH" >> $GITHUB_ENV
 
-      - name: Set Conan home
-        run: echo "CONAN_USER_HOME=${{ runner.temp }}\conan" >> $env:GITHUB_ENV
-
-      - name: Create Conan default profile
-        run: conan profile detect --force
-
-      - name: Get the sources from GitHub
-        run: conan source
-
-      - name: Conan install
-        run: conan install . --build=missing --profile profiles/windows/release
-
-      - name: Build package
-        run: conan build . --profile profiles/windows/release
-
-  build-macos:
-    name: Build on macOS
-    runs-on: macos-14
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          python-version: '3.11'
-
-      - name: Install Conan and build tools
-        run: |
-          pip install --upgrade conan
-          brew install cmake ninja
-
-      - name: Set Conan home
-        run: echo "CONAN_USER_HOME=${{ runner.temp }}/conan" >> $GITHUB_ENV
-
-      - name: Create Conan default profile
-        run: conan profile detect --force
-
-      - name: Get the sources from GitHub
-        run: conan source
-
-      - name: Conan install
-        run: conan install . --build=missing --profile profiles/macos/release
-
-      - name: Build package
-        run: conan build . --profile profiles/macos/release
+          name: rdkit-linux-x64
+          path: ${{ env.PACKAGE_PATH }}/p
+          retention-days: 7
+          if-no-files-found: error

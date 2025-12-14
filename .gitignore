@@ -43,3 +43,7 @@
 .venv
 .idea
 src
+/include/
+/lib/
+/share/
+/package_path.txt
