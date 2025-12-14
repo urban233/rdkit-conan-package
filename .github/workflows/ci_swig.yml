@@ -1,4 +1,4 @@
-name: CI
+name: CI SWIG
 
 on:
   push:
@@ -35,10 +35,10 @@ jobs:
         run: conan source
 
       - name: Conan install
-        run: conan install . --build=missing --profile profiles/windows/release
+        run: conan install . --build=missing --profile profiles/windows/release_java
 
       - name: Build package
-        run: conan build . --profile profiles/windows/release
+        run: conan build . --profile profiles/windows/release_java
 
   build-macos:
     name: Build on macOS
@@ -67,10 +67,10 @@ jobs:
         run: conan source
 
       - name: Conan install
-        run: conan install . --build=missing --profile profiles/macos/release
+        run: conan install . --build=missing --profile profiles/macos/release_java
 
       - name: Build package
-        run: conan build . --profile profiles/macos/release
+        run: conan build . --profile profiles/macos/release_java
 
   build-linux:
     name: Build on Linux
@@ -114,9 +114,9 @@ jobs:
 
       - name: Conan install
         run: |
-          conan install . --build=missing --profile profiles/linux/release \
+          conan install . --build=missing --profile profiles/linux/release_java \
             -c tools.system.package_manager:mode=install \
             -c tools.system.package_manager:sudo=True
 
       - name: Build package
-        run: conan build . --profile profiles/linux/release
+        run: conan build . --profile profiles/linux/release_java

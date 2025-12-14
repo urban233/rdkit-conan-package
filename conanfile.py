@@ -1,17 +1,16 @@
-# ----------------------------------------------------------------------------#
+# ---------------------------------------------------------------------------- #
 # This file contains source code for the Conan RDKit package
 # copyright (c) 2025 by Martin Urban.
 # It is unlawful to modify or remove this copyright notice.
 # Please see the accompanying LICENSE file for further information.
-# ----------------------------------------------------------------------------#
+# ---------------------------------------------------------------------------- #
 import os
-import pathlib
 import shutil
 
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
 from conan.tools.env import VirtualRunEnv
-from conan.tools.files import copy, get
+from conan.tools.files import copy, get, replace_in_file
 
 
 class RDKitConan(ConanFile):
@@ -43,6 +42,8 @@ class RDKitConan(ConanFile):
     "with_eigen": [True, False],
     # Conan specific options
     "with_ctest": [True, False],
+    "with_java": [True, False],
+    "with_csharp": [True, False],
   }
 
   default_options = {
@@ -52,7 +53,9 @@ class RDKitConan(ConanFile):
     "with_cairo": True,
     "with_eigen": True,
     # Conan specific options
-    "with_ctest": False,
+    "with_ctest": True,
+    "with_java": False,
+    "with_csharp": False
   }
 
   exports_sources = "CMakeLists.txt"
@@ -72,9 +75,48 @@ class RDKitConan(ConanFile):
     # Overwrite the root CMakeLists.txt with the exported version.
     # TODO: Consider replacing this file replacement strategy with a patch file
     # for more robust source management.
-    shutil.copyfile(
-      os.path.join(self.export_sources_folder, "CMakeLists.txt"),
-      os.path.join(self.source_folder, "CMakeLists.txt")
+    # shutil.copyfile(
+    #   os.path.join(self.export_sources_folder, "CMakeLists.txt"),
+    #   os.path.join(self.source_folder, "CMakeLists.txt")
+    # )
+
+    # Adding the set(Boost_USE_STATIC_LIBS ON) but only if
+    # RDK_INSTALL_DLLS_MSVC=OFF
+    replace_in_file(
+      self,
+      os.path.join(self.source_folder, "CMakeLists.txt"),
+      "# FIX: do we still need this?",
+      "# FIX: do we still need this?\nif(NOT RDK_INSTALL_DLLS_MSVC)\n  set(Boost_USE_STATIC_LIBS ON)\nendif()"
+    )
+
+    # Fix the Eigen3 discovery to make it conan compatible
+    replace_in_file(
+      self,
+      os.path.join(self.source_folder, "CMakeLists.txt"),
+      "find_package(Eigen3)\nif(RDK_BUILD_DESCRIPTORS3D)",
+      "find_package(Eigen3 REQUIRED)\nif(RDK_BUILD_DESCRIPTORS3D)"
+    )
+    replace_in_file(
+      self,
+      os.path.join(self.source_folder, "CMakeLists.txt"),
+      "if(NOT EIGEN3_FOUND)",
+      "if(NOT TARGET Eigen3::Eigen)"
+    )
+
+    # Replace the ${SWIG_USE_FILE} variable for UseSWIG to make it conan compatible
+    replace_in_file(
+      self,
+      os.path.join(self.source_folder, "Code", "JavaWrappers", "CMakeLists.txt"),
+      "include(${SWIG_USE_FILE})",
+      "include(UseSWIG)"
+    )
+    # Fix Java SWIG unique_ptr<RWMol> compilation errors.
+    # Only replace the first occurrence (unique_ptr block), not all SWIGCSHARP blocks.
+    replace_in_file(
+      self,
+      os.path.join(self.source_folder, "Code", "JavaWrappers", "ROMol.i"),
+      "#ifdef SWIGCSHARP\n%include <std_unique_ptr.i>",
+      "#if defined(SWIGCSHARP) || defined(SWIGJAVA)\n%include <std_unique_ptr.i>"
     )
 
   def layout(self):
@@ -93,7 +135,7 @@ class RDKitConan(ConanFile):
     # Propagate options to Boost to ensure binary compatibility.
     # RDKit typically requires specific Boost components to be present
     # and linked dynamically.
-    self.options["boost"].shared = True
+    self.options["boost"].shared = self.options.shared
     self.options["boost"].without_iostreams = False
     self.options["boost"].without_zlib = False
     self.options["boost"].without_serialization = False  # Required by RDKit
@@ -101,25 +143,41 @@ class RDKitConan(ConanFile):
 
   def generate(self):
     """Generates the build toolchains and dependency files."""
-    # --- CMake Toolchain Configuration ---
+    # <editor-fold desc="CMake Toolchain Configuration">
     tc = CMakeToolchain(self)
 
-    # Configuration mirrors the official Azure Pipelines build definition
     tc.variables["CMAKE_BUILD_TYPE"] = "Release"
-    tc.variables["RDK_INSTALL_INTREE"] = "OFF"  # Enforce use of package folder
 
     # Normalize path separators to ensure CMake handles the install prefix correctly
     if self.package_folder:
       tc.variables["CMAKE_INSTALL_PREFIX"] = self.package_folder.replace("\\", "/")
-    # RDKit Build Flags
-    tc.variables["RDK_INSTALL_STATIC_LIBS"] = "OFF"
-    tc.variables["RDK_INSTALL_DLLS_MSVC"] = "ON"
-    tc.variables["RDK_BUILD_CPP_TESTS"] = "ON"
+
+    # <editor-fold desc="RDKit Build Flags">
+    tc.variables["RDK_INSTALL_INTREE"] = "OFF"  # Enforce use of package folder
+
+    # <editor-fold desc="Shared vs. static">
+    if self.options.shared:
+      tc.variables["RDK_INSTALL_STATIC_LIBS"] = "OFF"
+      tc.variables["RDK_INSTALL_DLLS_MSVC"] = "ON"
+    else:
+      tc.variables["RDK_INSTALL_STATIC_LIBS"] = "ON"
+      tc.variables["RDK_INSTALL_DLLS_MSVC"] = "OFF"
+    # </editor-fold>
+
+    # <editor-fold desc="CTest related">
+    if self.options.with_ctest:
+      tc.variables["RDK_BUILD_CPP_TESTS"] = "ON"
+    else:
+      tc.variables["RDK_BUILD_CPP_TESTS"] = "OFF"
+    # </editor-fold>
+
+    # <editor-fold desc="Library support related">
+    # Python support is not yet supported
     tc.variables["RDK_BUILD_PYTHON_WRAPPERS"] = "OFF"
     tc.variables["RDK_BUILD_COORDGEN_SUPPORT"] = "ON"
     tc.variables["RDK_BUILD_MAEPARSER_SUPPORT"] = "ON"
     tc.variables["RDK_OPTIMIZE_POPCNT"] = "ON"
-    tc.variables["RDK_BUILD_TEST_GZIP"] = "ON"
+    tc.variables["RDK_BUILD_TEST_GZIP"] = "OFF"
     tc.variables["RDK_BUILD_FREESASA_SUPPORT"] = "ON"
     tc.variables["RDK_BUILD_AVALON_SUPPORT"] = "ON"
     tc.variables["RDK_BUILD_INCHI_SUPPORT"] = "ON"
@@ -127,21 +185,46 @@ class RDKitConan(ConanFile):
     tc.variables["RDK_BUILD_XYZ2MOL_SUPPORT"] = "ON"
     tc.variables["RDK_BUILD_CAIRO_SUPPORT"] = "ON"
     tc.variables["RDK_BUILD_THREADSAFE_SSS"] = "ON"
-    tc.variables["RDK_BUILD_SWIG_WRAPPERS"] = "OFF"
-    tc.variables["RDK_SWIG_STATIC"] = "OFF"
-    tc.variables["RDK_TEST_MULTITHREADED"] = "ON"
+    # </editor-fold>
 
-    # 1. Remove MSVC runtime enforcement to allow usage of the default VS runtime.
+    # <editor-fold desc="SWIG related">
+    if self.options.with_java or self.options.with_csharp:
+      tc.variables["RDK_BUILD_SWIG_WRAPPERS"] = "ON"
+      tc.variables["RDK_SWIG_STATIC"] = "ON"
+      # Set the SWIG executable from the Conan package
+      swig_dep = self.dependencies.build.get("swig")
+      swig_exe = os.path.join(swig_dep.package_folder, "bin", "swig.exe" if self.settings.os == "Windows" else "swig")
+      tc.cache_variables["SWIG_EXECUTABLE"] = swig_exe.replace("\\", "/")
+    else:
+      tc.variables["RDK_BUILD_SWIG_WRAPPERS"] = "OFF"
+      tc.variables["RDK_SWIG_STATIC"] = "OFF"
+
+    if self.options.with_java:
+      tc.variables["RDK_BUILD_SWIG_JAVA_WRAPPER"] = "ON"
+    else:
+      tc.variables["RDK_BUILD_SWIG_JAVA_WRAPPER"] = "OFF"
+
+    if self.options.with_csharp:
+      tc.variables["RDK_BUILD_SWIG_CSHARP_WRAPPER"] = "ON"
+    else:
+      tc.variables["RDK_BUILD_SWIG_CSHARP_WRAPPER"] = "OFF"
+    # </editor-fold>
+
+    tc.variables["RDK_TEST_MULTITHREADED"] = "ON"
+    # </editor-fold>
+
+    # Remove MSVC runtime enforcement to allow usage of the default VS runtime.
     if "CMAKE_MSVC_RUNTIME_LIBRARY" in tc.cache_variables:
       del tc.cache_variables["CMAKE_MSVC_RUNTIME_LIBRARY"]
 
-    # 2. Remove parallel compilation flags (/MP) automatically added by Conan.
+    # Remove parallel compilation flags (/MP) automatically added by Conan.
     tc.cache_variables.pop("CONAN_CXX_FLAGS", None)
     tc.cache_variables.pop("CONAN_C_FLAGS", None)
 
     tc.generate()
+    # </editor-fold>
 
-    # --- CMake Dependency Configuration ---
+    # <editor-fold desc="CMake Dependency Configuration">
     deps = CMakeDeps(self)
 
     # Configure Eigen
@@ -160,11 +243,19 @@ class RDKitConan(ConanFile):
     deps.set_property("cairo", "cmake_target_name", "Cairo::Cairo")
     deps.set_property("freetype", "cmake_file_name", "Freetype")
     deps.set_property("freetype", "cmake_target_name", "Freetype::Freetype")
+    # Configure SWIG
+    deps.set_property("swig", "cmake_file_name", "SWIG")
+    deps.set_property("swig", "cmake_target_name", "SWIG::SWIG")
 
     deps.generate()
+    # </editor-fold>
 
   def requirements(self):
     """Defines the package dependencies."""
+    # Special override which is necessary because cairo and swig need this
+    # but in different minors cairo .42 and swig .43
+    self.requires("pcre2/10.43", override=True)
+    # --------------------------------------------------------------------------
     self.requires("boost/1.89.0")
     self.requires("zlib/1.3.1")
     self.requires("sqlite3/3.51.0")
@@ -176,15 +267,16 @@ class RDKitConan(ConanFile):
     if self.options.with_python:
       self.requires("numpy/1.26.0")
 
+  def build_requirements(self):
+    """Builds the required packages."""
+    if self.options.with_java or self.options.with_csharp:
+      self.tool_requires("swig/4.4.0")
+
   def build(self):
     """Builds the project using CMake."""
     cmake = CMake(self)
     cmake.configure()
-
-    # Build internal RDKit libraries sequentially.
-    # This is critical on Windows to avoid race conditions during the build process.
-    # We target 'install' directly with single-process execution (/m:1).
-    # cmake.build(cli_args=["--target", "install", "--", "/m:1"])
+    # This cmake build command mirrors the one in the azure pipelines
     cmake.build(cli_args=["--target", "install"])
 
     if self.options.with_ctest:
@@ -318,7 +410,6 @@ class RDKitConan(ConanFile):
       "TautomerQuery",
       "Trajectory"
     ]
-
     deps = [
       "boost::boost",
       "zlib::zlib",
@@ -335,7 +426,10 @@ class RDKitConan(ConanFile):
     # Create a CMake component for each RDKit sub-library.
     for name in libs:
       comp = self.cpp_info.components[name]
-      comp.libs = [f"RDKit{name}"]
+      if self.options.shared:
+        comp.libs = [f"RDKit{name}"]
+      else:
+        comp.libs = [name]
       comp.set_property("cmake_target_name", f"RDKit::{name}")
       # Each RDKit component depends on the common external packages.
       comp.requires = deps.copy()
