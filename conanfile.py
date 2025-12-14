@@ -135,7 +135,7 @@ class RDKitConan(ConanFile):
     # Propagate options to Boost to ensure binary compatibility.
     # RDKit typically requires specific Boost components to be present
     # and linked dynamically.
-    self.options["boost"].shared = False  # Normally true
+    self.options["boost"].shared = self.options.shared
     self.options["boost"].without_iostreams = False
     self.options["boost"].without_zlib = False
     self.options["boost"].without_serialization = False  # Required by RDKit

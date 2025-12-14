@@ -103,6 +103,12 @@ or simply
 conan install rdkit/2025.09.03 --profile profiles/<os>/release_java
 ```
 
+A good starting point, on how to use this Conan package is the 
+[rdkit-kotlin-example-template](https://github.com/urban233/rdkit-kotlin-example-template) 
+and 
+[rdkit-java-example-template](https://github.com/urban233/rdkit-java-example-template)
+GitHub repository.
+
 ### Windows
 After the build process finished, you can access the `GraphMolWrap.dll` under
 ```shell
@@ -124,7 +130,7 @@ and the JavaDoc API documentation under:
 rdkit-conan-package\src\Code\JavaWrappers\gmwrapper\doc\org\RDKit
 ```
 
-**NOTE**: This is not tested yet!
+**NOTE**: This is **not** tested!
 
 ### Linux
 The `libGraphMolWrap.so` will be placed under a similar directory, maybe
@@ -136,6 +142,8 @@ and the JavaDoc API documentation under:
 ```shell
 rdkit-conan-package\src\Code\JavaWrappers\gmwrapper\doc\org\RDKit
 ```
+
+**NOTE**: This is **not** tested!
 
 ---
 
