@@ -316,12 +316,13 @@ class RDKitConan(ConanFile):
     with env.vars(self).apply():
       inventory = StringIO()
       self.run(f"ctest -C {self.settings.build_type} --show-only=json-v1",
-               cwd=self.build_folder, stdout=inventory)
+               cwd=self.build_folder, stdout=inventory, env=None)
       save(self, os.path.join(self.build_folder, "upstream-inventory.json"), inventory.getvalue())
       self.run(
         f"ctest -C {self.settings.build_type} --output-on-failure --no-tests=error "
         "--output-junit upstream-tests.xml --timeout 600",
         cwd=self.build_folder,
+        env=None,
       )
 
   def package(self):
