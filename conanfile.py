@@ -66,10 +66,6 @@ class RDKitConan(ConanFile):
 
   def validate(self):
     check_min_cppstd(self, "20")
-    if self.options.with_python or self.options.with_csharp:
-      raise ConanInvalidConfiguration("Python and C# bindings are not supported by this recipe")
-    if not self.options.with_eigen:
-      raise ConanInvalidConfiguration("This recipe requires with_eigen=True")
 
   def source(self):
     """Retrieves and prepares the source code."""
@@ -134,7 +130,7 @@ class RDKitConan(ConanFile):
          dst=os.path.join(self.source_folder, "conan-cmake"))
     root_cmake = os.path.join(self.source_folder, "CMakeLists.txt")
     save(self, root_cmake, load(self, root_cmake) +
-         '\ninclude("${CMAKE_CURRENT_SOURCE_DIR}/conan-cmake/package-metadata.cmake")\n')
+         '\ninclude("${CMAKE_CURRENT_SOURCE_DIR}/conan-cmake/conan-integration.cmake")\n')
 
   def layout(self):
     """Defines the standard CMake layout for the project."""
@@ -146,6 +142,10 @@ class RDKitConan(ConanFile):
 
   def configure(self):
     """Configures build options and dependency flags."""
+    if self.options.with_python or self.options.with_csharp:
+      raise ConanInvalidConfiguration("Python and C# bindings are not supported by this recipe")
+    if not self.options.with_eigen:
+      raise ConanInvalidConfiguration("This recipe requires with_eigen=True")
     if self.options.shared:
       self.options.rm_safe("fPIC")
 

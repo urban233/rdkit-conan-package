@@ -27,7 +27,10 @@ dependencies must match the requested static/shared linkage.
 There are no automatic test retries or expected-failure exclusions. JUnit reports,
 test counts, and resolved package graphs are uploaded even when a job fails.
 Weekly runs check whether changes in dependency recipes or runner images affect
-the package. Native compiler profiles are detected on each runner; Conan, CMake,
+the package. Producer jobs cache dependency packages between runs; scheduled runs
+resolve dependencies in a fresh cache. RDKit is always rebuilt, and all tests run
+on every invocation. Consumer jobs always use a fresh relocated cache.
+Native compiler profiles are detected on each runner; Conan, CMake,
 Ninja, Python, and the JDK use explicit versions in the setup action.
 
 Configure branch protection to require the uniquely named `ci-required` check.
@@ -46,6 +49,7 @@ Choose a fresh writable directory for `CONAN_HOME`, then run:
 
 ```sh
 conan profile detect --force
+python ci/run.py prepare --variant static
 python ci/run.py build --variant static
 ```
 
@@ -63,7 +67,8 @@ The lightweight report-validation checks run with:
 python -m unittest discover -s ci -p 'test_*.py'
 ```
 
-Python and C# bindings and disabling Eigen are explicitly unsupported. This CI
-does not claim Debug, cross-compilation, other architectures, or other compiler
+Python and C# bindings and disabling Eigen are explicitly unsupported. The Linux
+minimal job checks that these options fail before dependency resolution.
+This CI does not claim Debug, cross-compilation, other architectures, or other compiler
 versions are validated. Future supported RDKit releases must enter the same
 acceptance matrix before being documented as supported.

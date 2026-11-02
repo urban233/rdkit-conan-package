@@ -32,13 +32,13 @@ Before using this Conan package, ensure you have the following installed:
    ```bash
    python --version
    ```
-2. **Conan** (≥2.0) – the C/C++ package manager.
+2. **Conan** (2.34.0 tested) – the C/C++ package manager.
    Install via pip (in a virtual environment):
 
    ```bash
-   pip install conan
+   pip install conan==2.34.0
    ```
-3. **CMake** (≥3.20) – required to build RDKit.
+3. **CMake** (≥3.21; 3.31.10 tested) – required to build RDKit and write JUnit test reports.
 
    ```bash
    cmake --version
@@ -63,7 +63,8 @@ cd rdkit-conan-package
 To build the RDKit Conan package locally:
 
 ```bash
-conan create . rdkit/2025.09.03
+conan profile detect --force
+conan create . --build=missing -s:h compiler.cppstd=20
 ```
 
 This will build the RDKit library and create a local Conan package.
@@ -76,7 +77,7 @@ Once the Conan package is created, you can use it in any project:
 
 ```bash
 mkdir my_project && cd my_project
-conan install rdkit/2025.09.03
+conan install --requires=rdkit/2025.09.3 --build=missing -s:h compiler.cppstd=20 -g CMakeDeps -g CMakeToolchain
 ```
 
 Include the generated files in your CMake project:
@@ -104,7 +105,7 @@ conan build . --profile profiles/<os>/release_java
 ```
 or simply
 ```shell
-conan install rdkit/2025.09.03 --profile profiles/<os>/release_java
+conan create . --build=missing -pr:h profiles/<os>/release_java -pr:b default
 ```
 
 A good starting point, on how to use this Conan package is the 

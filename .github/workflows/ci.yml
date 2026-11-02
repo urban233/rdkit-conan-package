@@ -45,6 +45,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
+      - name: Restore dependency binaries
+        if: github.event_name != 'schedule'
+        uses: actions/cache/restore@v4
+        with:
+          path: artifacts/dependencies.tgz
+          key: dependencies-${{ matrix.os }}-${{ matrix.variant }}-${{ hashFiles('conanfile.py', '.github/actions/setup/action.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            dependencies-${{ matrix.os }}-${{ matrix.variant }}-${{ hashFiles('conanfile.py', '.github/actions/setup/action.yml') }}-
+            dependencies-${{ matrix.os }}-${{ matrix.variant }}-
+      - name: Prepare dependencies
+        run: python ci/run.py prepare --variant '${{ matrix.variant }}'
+      - name: Save dependency binaries before building RDKit
+        uses: actions/cache/save@v4
+        with:
+          path: artifacts/dependencies.tgz
+          key: dependencies-${{ matrix.os }}-${{ matrix.variant }}-${{ hashFiles('conanfile.py', '.github/actions/setup/action.yml') }}-${{ github.run_id }}
       - name: Build and test package
         run: python ci/run.py build --variant '${{ matrix.variant }}'
       - name: Upload package for independent consumption

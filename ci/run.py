@@ -16,6 +16,20 @@ def run(*arguments):
     subprocess.run(list(map(str, arguments)), check=True)
 
 
+def verify_unsupported_options(reference, profiles):
+    for option, value, message in (
+        ("with_python", True, "Python and C# bindings are not supported"),
+        ("with_csharp", True, "Python and C# bindings are not supported"),
+        ("with_eigen", False, "requires with_eigen=True"),
+    ):
+        command = ["conan", "install", f"--requires={reference}", *profiles,
+                   "-o:h", f"rdkit/*:{option}={value}", "--build=never", "--no-remote"]
+        result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        print(result.stdout, flush=True)
+        if result.returncode == 0 or message not in result.stdout:
+            raise RuntimeError(f"Unsupported option did not fail clearly: {option}={value}")
+
+
 def collect_reports():
     for directory in [Path(os.environ["CONAN_HOME"]), ROOT / "test_package" / "build"]:
         for name in ("upstream-tests.xml", "consumer-tests.xml", "upstream-inventory.json"):
@@ -59,7 +73,7 @@ def verify_reports(upstream, cairo, inchi):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("phase", choices=("build", "consume"))
+    parser.add_argument("phase", choices=("prepare", "build", "consume"))
     parser.add_argument("--variant", choices=("static", "shared", "java", "minimal"), required=True)
     args = parser.parse_args()
     ARTIFACTS.mkdir(exist_ok=True)
@@ -68,7 +82,27 @@ def main():
                "-o:h", f"rdkit/*:with_ctest={not java}",
                "-o:h", f"rdkit/*:with_cairo={not minimal}",
                "-o:h", f"rdkit/*:with_inchi={not minimal}"]
-    profiles = ["-pr:h", "default", "-pr:b", "default"]
+    profiles = ["-pr:h", "default", "-pr:b", "default", "-s:h", "compiler.cppstd=20"]
+    if args.phase == "prepare":
+        dependency_cache = ARTIFACTS / "dependencies.tgz"
+        if dependency_cache.is_file():
+            run("conan", "cache", "restore", dependency_cache)
+        graph = ARTIFACTS / "dependencies-graph.json"
+        run("conan", "install", ROOT, *profiles, *options, "--build=missing",
+            "-c:h", "tools.system.package_manager:mode=install",
+            "-c:h", "tools.system.package_manager:sudo=True",
+            "--format=json", f"--out-file={graph}")
+        package_list = ARTIFACTS / "dependencies-list.json"
+        run("conan", "list", f"--graph={graph}", "--format=json", f"--out-file={package_list}")
+        data = json.loads(package_list.read_text())
+        for recipes in data.values():
+            for reference in list(recipes):
+                if reference.startswith("rdkit/"):
+                    del recipes[reference]
+        package_list.write_text(json.dumps(data, indent=2) + "\n")
+        run("conan", "cache", "save", f"--list={package_list}", "--no-source",
+            f"--file={dependency_cache}")
+        return
     try:
         if args.phase == "build":
             graph = ARTIFACTS / "create.json"
@@ -82,6 +116,8 @@ def main():
             if len(packages) != 1 or packages[0].get("binary") != "Build":
                 raise RuntimeError("The current RDKit recipe was not built")
             (ARTIFACTS / "reference.txt").write_text(packages[0]["ref"] + "\n")
+            if minimal:
+                verify_unsupported_options(packages[0]["ref"], profiles)
             run("conan", "list", f"--graph={graph}", "--graph-context=host-only",
                 "--format=json", f"--out-file={ARTIFACTS / 'packages.json'}")
             run("conan", "cache", "save", f"--list={ARTIFACTS / 'packages.json'}", "--no-source",
