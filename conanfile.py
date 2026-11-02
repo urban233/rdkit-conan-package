@@ -7,9 +7,11 @@
 import json
 import os
 import shutil
+from io import StringIO
 
 from conan import ConanFile
 from conan.errors import ConanInvalidConfiguration
+from conan.tools.build import check_min_cppstd
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
 from conan.tools.env import VirtualRunEnv
 from conan.tools.files import collect_libs, copy, get, load, replace_in_file, save
@@ -63,6 +65,7 @@ class RDKitConan(ConanFile):
   exports_sources = "cmake/*"
 
   def validate(self):
+    check_min_cppstd(self, "20")
     if self.options.with_python or self.options.with_csharp:
       raise ConanInvalidConfiguration("Python and C# bindings are not supported by this recipe")
     if not self.options.with_eigen:
@@ -266,19 +269,18 @@ class RDKitConan(ConanFile):
 
   def requirements(self):
     """Defines the package dependencies."""
-    # Special override which is necessary because cairo and swig need this
-    # but in different minors cairo .42 and swig .43
-    self.requires("pcre2/10.43", override=True)
+    # Align Cairo and SWIG with the PCRE2 minor used by the SWIG binaries.
+    self.requires("pcre2/10.44", override=True)
     # --------------------------------------------------------------------------
-    self.requires("boost/1.89.0")
+    self.requires("boost/1.89.0", transitive_headers=True)
     self.requires("zlib/1.3.1")
     self.requires("sqlite3/3.51.0")
-    self.requires("freetype/2.15.0")
+    self.requires("freetype/2.15.0", transitive_headers=True)
 
     if self.options.with_cairo:
-      self.requires("cairo/1.18.0")
+      self.requires("cairo/1.18.0", transitive_headers=True)
     if self.options.with_eigen:
-      self.requires("eigen/3.4.0")
+      self.requires("eigen/3.4.0", transitive_headers=True)
     if self.options.with_python:
       self.requires("numpy/1.26.0")
 
@@ -310,6 +312,10 @@ class RDKitConan(ConanFile):
     env.prepend_path("DYLD_LIBRARY_PATH", os.path.join(self.build_folder, "lib"))
 
     with env.vars(self).apply():
+      inventory = StringIO()
+      self.run(f"ctest -C {self.settings.build_type} --show-only=json-v1",
+               cwd=self.build_folder, stdout=inventory)
+      save(self, os.path.join(self.build_folder, "upstream-inventory.json"), inventory.getvalue())
       self.run(
         f"ctest -C {self.settings.build_type} --output-on-failure --no-tests=error "
         "--output-junit upstream-tests.xml --timeout 600",

@@ -29,7 +29,7 @@ runs:
       shell: bash
       run: |
         conan profile detect --force
-        python -c "import os,re; from pathlib import Path; p=Path(os.environ['CONAN_HOME'])/'profiles/default'; p.write_text(re.sub(r'compiler.cppstd=.*', 'compiler.cppstd=17', p.read_text()))"
+        python -c "import os,re; from pathlib import Path; p=Path(os.environ['CONAN_HOME'])/'profiles/default'; p.write_text(re.sub(r'compiler.cppstd=.*', 'compiler.cppstd=20', p.read_text()))"
         printf '\ncore:non_interactive=True\ntools.build:jobs=2\ntools.cmake.cmaketoolchain:generator=Ninja\n' >> "$CONAN_HOME/global.conf"
         conan profile show -pr:h default -pr:b default
         conan --version

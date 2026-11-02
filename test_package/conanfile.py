@@ -1,5 +1,7 @@
 import os
+import re
 import shlex
+import subprocess
 from pathlib import Path
 
 from conan import ConanFile
@@ -38,11 +40,31 @@ class PackageAcceptance(ConanFile):
                  "--no-tests=error --output-junit consumer-tests.xml --timeout 120",
                  cwd=self.build_folder, env="conanrun")
         dependency = self.dependencies["rdkit"]
+        executable = Path(self.build_folder) / ("core.exe" if self.settings.os == "Windows" else "core")
+        if not executable.is_file():
+            executable = executable.parent / str(self.settings.build_type) / executable.name
+        if self.settings.os == "Windows":
+            command = ["dumpbin", "/DEPENDENTS", str(executable)]
+        elif self.settings.os == "Macos":
+            command = ["otool", "-L", str(executable)]
+        else:
+            command = ["readelf", "-d", str(executable)]
+        linkage = subprocess.check_output(command, text=True)
+        print(linkage)
+        has_shared_rdkit = re.search(r"(?:lib)?RDKit[^\s/]+\.(?:so|dylib|dll)", linkage) is not None
+        if has_shared_rdkit != bool(dependency.options.shared):
+            raise RuntimeError("Consumer linkage does not match the requested static/shared package")
         package = Path(dependency.package_folder)
         if not (package / "licenses" / "license.txt").is_file():
             raise RuntimeError("Package is missing its license")
         if not (package / "share" / "RDKit" / "Data" / "BaseFeatures.fdef").is_file():
             raise RuntimeError("Package is missing RDKit runtime data")
+        for enabled, header in (
+            (dependency.options.with_cairo, "GraphMol/MolDraw2D/MolDraw2DCairo.h"),
+            (dependency.options.with_inchi, "GraphMol/inchi.h"),
+        ):
+            if (package / "include" / header).is_file() != bool(enabled):
+                raise RuntimeError(f"Installed feature does not match its option: {header}")
         if dependency.options.with_java:
             jar = package / "share" / "java" / "org.RDKit.jar"
             native = list((package / "bin").glob("*GraphMolWrap.*"))

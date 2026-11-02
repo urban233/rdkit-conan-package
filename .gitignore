@@ -49,4 +49,5 @@ src
 /package_path.txt
 /artifacts/
 /test_package/build/
+/test_package/CMakeUserPresets.json
 __pycache__/

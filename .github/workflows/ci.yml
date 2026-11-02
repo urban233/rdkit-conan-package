@@ -15,10 +15,6 @@ concurrency:
   group: acceptance-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
-defaults:
-  run:
-    shell: bash
-
 env:
   CMAKE_BUILD_PARALLEL_LEVEL: '2'
   CTEST_PARALLEL_LEVEL: '2'
@@ -112,6 +108,10 @@ jobs:
     needs: [validation, build, consume]
     runs-on: ubuntu-22.04
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Require every package and consumer job to pass
         env:
           VALIDATION_RESULT: ${{ needs.validation.result }}
@@ -121,3 +121,9 @@ jobs:
           test "$VALIDATION_RESULT" = success
           test "$BUILD_RESULT" = success
           test "$CONSUME_RESULT" = success
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-reports-*'
+          path: acceptance-evidence
+      - name: Verify complete platform and configuration coverage
+        run: python ci/check_matrix.py acceptance-evidence

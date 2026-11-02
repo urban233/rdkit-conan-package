@@ -22,6 +22,8 @@ environment are available to the consumers. Dependencies are transferred with
 their exact recipe and binary revisions.
 
 Empty test suites, missing consumer tests, failures, and skipped tests are errors.
+Upstream execution must match CTest's discovered test inventory. Native binary
+dependencies must match the requested static/shared linkage.
 There are no automatic test retries or expected-failure exclusions. JUnit reports,
 test counts, and resolved package graphs are uploaded even when a job fails.
 Weekly runs check whether changes in dependency recipes or runner images affect
@@ -30,6 +32,9 @@ Ninja, Python, and the JDK use explicit versions in the setup action.
 
 Configure branch protection to require the uniquely named `ci-required` check.
 It rejects failed, cancelled, and unexpectedly skipped build/consumer jobs.
+It also requires separate acceptance evidence for all twenty expected
+platform/configuration/phase combinations, so an accidentally reduced matrix
+cannot pass the final check.
 The workflow runs on pull requests, pushes to `main` and `feat/**`, weekly, and
 through manual workflow dispatch. No publishing or release steps are included.
 

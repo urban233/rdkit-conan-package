@@ -18,7 +18,7 @@ def run(*arguments):
 
 def collect_reports():
     for directory in [Path(os.environ["CONAN_HOME"]), ROOT / "test_package" / "build"]:
-        for name in ("upstream-tests.xml", "consumer-tests.xml"):
+        for name in ("upstream-tests.xml", "consumer-tests.xml", "upstream-inventory.json"):
             for index, report in enumerate(directory.rglob(name)):
                 shutil.copy2(report, ARTIFACTS / f"{directory.name}-{index}-{name}")
 
@@ -35,6 +35,16 @@ def verify_reports(upstream, cairo, inchi):
     upstream_reports = list(ARTIFACTS.glob("*upstream-tests.xml"))
     if upstream and not upstream_reports:
         raise RuntimeError("No upstream test report was produced")
+    if upstream:
+        inventories = list(ARTIFACTS.glob("*upstream-inventory.json"))
+        if len(inventories) != len(upstream_reports):
+            raise RuntimeError("Missing upstream test inventory")
+        discovered = {test["name"] for inventory in inventories
+                      for test in json.loads(inventory.read_text())["tests"]}
+        executed = {case.attrib["name"] for report in upstream_reports
+                    for case in ET.parse(report).getroot().iter("testcase")}
+        if not discovered or discovered != executed:
+            raise RuntimeError("Upstream test execution does not match the discovered inventory")
     counts = {}
     for report in consumers + upstream_reports:
         cases = list(ET.parse(report).getroot().iter("testcase"))
@@ -87,6 +97,7 @@ def main():
     verify_reports(args.phase == "build" and not java, not minimal, not minimal)
     (ARTIFACTS / "acceptance.json").write_text(json.dumps({
         "phase": args.phase, "variant": args.variant, "java": java, "success": True,
+        "os": os.environ.get("RUNNER_OS"), "arch": os.environ.get("RUNNER_ARCH"),
     }, indent=2) + "\n")
 
 

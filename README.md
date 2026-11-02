@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/license-BSD-blue.svg)](https://github.com/rdkit/rdkit/blob/master/LICENSE)
 [![Conan](https://img.shields.io/badge/conan-ready-brightgreen.svg)](https://conan.io/)
 
-This repository provides a **Conan package** for the [RDKit](https://github.com/rdkit/rdkit) library, allowing easy integration of RDKit into C++ and Python projects using the Conan C/C++ package manager.
+This repository provides a **Conan package** for the [RDKit](https://github.com/rdkit/rdkit) library, with C++ libraries and optional Java bindings.
 
 ---
 
@@ -27,7 +27,7 @@ C++ packages are tested on Windows, Linux, and macOS.
 
 Before using this Conan package, ensure you have the following installed:
 
-1. **Python** (≥3.8) – required for Conan and RDKit scripting.
+1. **Python** (≥3.11) – required for the tested Conan toolchain and scripting.
 
    ```bash
    python --version
@@ -43,7 +43,7 @@ Before using this Conan package, ensure you have the following installed:
    ```bash
    cmake --version
    ```
-4. **Compiler** – a C++17 compatible compiler (e.g., GCC, Clang, MSVC).
+4. **Compiler** – a C++20 compatible compiler (e.g., GCC, Clang, MSVC).
 
 ---
 

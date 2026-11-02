@@ -47,8 +47,19 @@ class ReportChecks(unittest.TestCase):
         self.consumer()
         (self.artifacts / "test-upstream-tests.xml").write_text(
             '<testsuite><testcase name="upstream-example"/></testsuite>')
+        (self.artifacts / "test-upstream-inventory.json").write_text(
+            '{"tests":[{"name":"upstream-example"}]}')
         run.verify_reports(True, True, True)
         self.assertTrue((self.artifacts / "test-counts.json").is_file())
+
+    def test_missing_discovered_test_fails(self):
+        self.consumer()
+        (self.artifacts / "test-upstream-tests.xml").write_text(
+            '<testsuite><testcase name="upstream-example"/></testsuite>')
+        (self.artifacts / "test-upstream-inventory.json").write_text(
+            '{"tests":[{"name":"upstream-example"},{"name":"missing"}]}')
+        with self.assertRaises(RuntimeError):
+            run.verify_reports(True, True, True)
 
 
 if __name__ == "__main__":

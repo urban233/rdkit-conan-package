@@ -5,7 +5,7 @@ find_package(RDKit CONFIG REQUIRED)
 
 function(package_test name)
   add_executable(${name} ${name}.cpp)
-  target_compile_features(${name} PRIVATE cxx_std_17)
+  target_compile_features(${name} PRIVATE cxx_std_20)
   target_link_libraries(${name} PRIVATE ${ARGN})
   add_test(NAME ${name} COMMAND ${name})
 endfunction()
