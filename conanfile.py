@@ -164,6 +164,7 @@ class RDKitConan(ConanFile):
     tc = CMakeToolchain(self)
 
     tc.variables["CMAKE_BUILD_TYPE"] = str(self.settings.build_type)
+    tc.variables["EXECUTABLE_OUTPUT_PATH"] = os.path.join(self.build_folder, "bin").replace("\\", "/")
 
     # Normalize path separators to ensure CMake handles the install prefix correctly
     if self.package_folder:
@@ -307,6 +308,7 @@ class RDKitConan(ConanFile):
     env.define("RDBASE", self.source_folder)
     env.define("RDBase", self.source_folder)
     env.prepend_path("PATH", f"{self.build_folder}")
+    env.prepend_path("PATH", f"{self.build_folder}/bin")
     env.prepend_path("PATH", f"{self.build_folder}/bin/Release")
     env.prepend_path("LD_LIBRARY_PATH", os.path.join(self.build_folder, "lib"))
     env.prepend_path("DYLD_LIBRARY_PATH", os.path.join(self.build_folder, "lib"))
