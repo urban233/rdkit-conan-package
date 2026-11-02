@@ -21,6 +21,10 @@ This repository provides a **Conan package** for the [RDKit](https://github.com/
 
 ## Prerequisites
 
+Automated package and runtime checks are described in [CI acceptance testing](ci/README.md).
+Python and C# bindings are currently unsupported by this recipe. Java and native
+C++ packages are tested on Windows, Linux, and macOS.
+
 Before using this Conan package, ensure you have the following installed:
 
 1. **Python** (≥3.8) – required for Conan and RDKit scripting.
@@ -39,7 +43,7 @@ Before using this Conan package, ensure you have the following installed:
    ```bash
    cmake --version
    ```
-4. **Compiler** – a C++14 compatible compiler (e.g., GCC, Clang, MSVC).
+4. **Compiler** – a C++17 compatible compiler (e.g., GCC, Clang, MSVC).
 
 ---
 

@@ -1,0 +1,37 @@
+name: Set up package testing
+description: Install pinned build tools and configure a native Conan profile
+inputs:
+  cache-name:
+    description: Name of the isolated Conan cache in the runner temporary directory
+    default: conan-build
+runs:
+  using: composite
+  steps:
+    - name: Isolate Conan cache
+      shell: bash
+      env:
+        CACHE_NAME: ${{ inputs.cache-name }}
+      run: printf 'CONAN_HOME=%s/%s\n' "$RUNNER_TEMP" "$CACHE_NAME" >> "$GITHUB_ENV"
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+    - name: Install build tools
+      shell: bash
+      run: python -m pip install conan==2.34.0 cmake==3.31.10 ninja==1.13.0
+    - name: Set up MSVC
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+    - name: Detect native compiler
+      shell: bash
+      run: |
+        conan profile detect --force
+        python -c "import os,re; from pathlib import Path; p=Path(os.environ['CONAN_HOME'])/'profiles/default'; p.write_text(re.sub(r'compiler.cppstd=.*', 'compiler.cppstd=17', p.read_text()))"
+        printf '\ncore:non_interactive=True\ntools.build:jobs=2\ntools.cmake.cmaketoolchain:generator=Ninja\n' >> "$CONAN_HOME/global.conf"
+        conan profile show -pr:h default -pr:b default
+        conan --version
+        cmake --version
+        java -version
