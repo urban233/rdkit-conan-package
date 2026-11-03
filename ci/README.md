@@ -1,6 +1,6 @@
 # Package acceptance testing
 
-The `Package acceptance` workflow tests RDKit 2025.09.3. A successful run requires
+The `Package acceptance` workflow tests RDKit 2025.09.6. A successful run requires
 all ten build configurations and their ten independent consumer jobs to pass:
 
 | Platform | Static | Shared | Java | Cairo/InChI disabled |

@@ -77,7 +77,7 @@ Once the Conan package is created, you can use it in any project:
 
 ```bash
 mkdir my_project && cd my_project
-conan install --requires=rdkit/2025.09.3 --build=missing -s:h compiler.cppstd=20 -g CMakeDeps -g CMakeToolchain
+conan install --requires=rdkit/2025.09.6 --build=missing -s:h compiler.cppstd=20 -g CMakeDeps -g CMakeToolchain
 ```
 
 Include the generated files in your CMake project:

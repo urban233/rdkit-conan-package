@@ -27,7 +27,7 @@ class RDKitConan(ConanFile):
   """
 
   name = "rdkit"
-  version = "2025.09.3"
+  version = "2025.09.6"
   license = "BSD-3-Clause"
   url = "https://github.com/rdkit/rdkit"
   description = (
