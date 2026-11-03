@@ -41,8 +41,12 @@ It rejects failed, cancelled, and unexpectedly skipped build/consumer jobs.
 It also requires separate acceptance evidence for all twenty expected
 platform/configuration/phase combinations, so an accidentally reduced matrix
 cannot pass the final check.
-The workflow runs on pull requests, pushes to `main` and `feat/**`, weekly, and
-through manual workflow dispatch. No publishing or release steps are included.
+The workflow runs on pull requests, pushes to `main`, weekly, and through manual
+workflow dispatch. Use manual dispatch to validate a feature branch before
+opening its pull request. Feature pushes use the pull-request run once a PR is
+open, avoiding duplicate push/PR runs and misleading failures from cancellation.
+Concurrency is separate for each event type so manual runs cannot cancel PR
+validation. No publishing or release steps are included.
 
 ## Running locally
 
