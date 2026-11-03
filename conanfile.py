@@ -101,7 +101,7 @@ class RDKitConan(ConanFile):
       self,
       os.path.join(self.source_folder, "CMakeLists.txt"),
       "find_package(Eigen3 NO_MODULE)",
-      "find_package(Eigen3 REQUIRED CONFIG)"
+      "find_package(Eigen3 REQUIRED CONFIG)\nfind_package(EXPAT REQUIRED CONFIG)"
     )
 
     # Replace the ${SWIG_USE_FILE} variable for UseSWIG to make it conan compatible
@@ -330,7 +330,8 @@ class RDKitConan(ConanFile):
   def build_requirements(self):
     """Builds the required packages."""
     if self.options.with_ctest:
-      self.test_requires("onetbb/2023.1.0", options={"tbbbind": False})
+      tbb_options = {} if self.settings.os == "Macos" else {"tbbbind": False}
+      self.test_requires("onetbb/2023.1.0", options=tbb_options)
     if self.options.with_java or self.options.with_csharp:
       self.tool_requires("swig/4.4.0")
 
