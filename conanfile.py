@@ -4,13 +4,17 @@
 # It is unlawful to modify or remove this copyright notice.
 # Please see the accompanying LICENSE file for further information.
 # ---------------------------------------------------------------------------- #
+import json
 import os
 import shutil
+from io import StringIO
 
 from conan import ConanFile
+from conan.errors import ConanInvalidConfiguration
+from conan.tools.build import check_min_cppstd
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
 from conan.tools.env import VirtualRunEnv
-from conan.tools.files import copy, get, replace_in_file
+from conan.tools.files import collect_libs, copy, get, load, replace_in_file, save
 
 
 class RDKitConan(ConanFile):
@@ -58,7 +62,10 @@ class RDKitConan(ConanFile):
     "with_csharp": False
   }
 
-  exports_sources = "CMakeLists.txt"
+  exports_sources = "cmake/*"
+
+  def validate(self):
+    check_min_cppstd(self, "20")
 
   def source(self):
     """Retrieves and prepares the source code."""
@@ -118,6 +125,51 @@ class RDKitConan(ConanFile):
       "#ifdef SWIGCSHARP\n%include <std_unique_ptr.i>",
       "#if defined(SWIGCSHARP) || defined(SWIGJAVA)\n%include <std_unique_ptr.i>"
     )
+    # The additional ChemDraw link must follow the same static/shared selection
+    # as the other SWIG libraries, instead of retaining a build-tree dependency.
+    replace_in_file(
+      self,
+      os.path.join(self.source_folder, "Code", "JavaWrappers", "gmwrapper", "CMakeLists.txt"),
+      "rdkit_base ${RDKit_THREAD_LIBS} ChemDraw expat)",
+      "rdkit_base ${RDKit_THREAD_LIBS} ChemDraw${swigRDKitLibSuffix} expat)"
+    )
+
+    # Test entry points and the private EHT implementation are static helpers,
+    # even when the public RDKit libraries are shared.
+    replace_in_file(
+      self, os.path.join(self.source_folder, "Code", "RDGeneral", "CMakeLists.txt"),
+      "add_library(rdkitCatch catch_main.cpp)",
+      "add_library(rdkitCatch STATIC catch_main.cpp)"
+    )
+    replace_in_file(
+      self, os.path.join(self.source_folder, "CMakeLists.txt"),
+      "FetchContent_MakeAvailable(Catch2)",
+      'set(_saved_shared_before_catch "${BUILD_SHARED_LIBS}")\n'
+      'set(BUILD_SHARED_LIBS OFF)\n'
+      'FetchContent_MakeAvailable(Catch2)\n'
+      'set(BUILD_SHARED_LIBS "${_saved_shared_before_catch}")'
+    )
+    replace_in_file(
+      self, os.path.join(self.source_folder, "External", "YAeHMOP", "CMakeLists.txt"),
+      "add_subdirectory(yaehmop/tightbind EXCLUDE_FROM_ALL True)",
+      'set(_saved_build_shared_libs "${BUILD_SHARED_LIBS}")\n'
+      'set(BUILD_SHARED_LIBS OFF)\n'
+      'add_subdirectory(yaehmop/tightbind EXCLUDE_FROM_ALL True)\n'
+      'set(BUILD_SHARED_LIBS "${_saved_build_shared_libs}")'
+    )
+    # Random-access suppliers require byte offsets; Windows text-mode streams
+    # translate line endings and invalidate the test's seek/tell positions.
+    replace_in_file(
+      self, os.path.join(self.source_folder, "Code", "GraphMol", "FileParsers", "v2_suppliers_catch.cpp"),
+      "std::ifstream inStream(fName);",
+      "std::ifstream inStream(fName, std::ios_base::binary);"
+    )
+
+    copy(self, "*.cmake", src=os.path.join(self.export_sources_folder, "cmake"),
+         dst=os.path.join(self.source_folder, "conan-cmake"))
+    root_cmake = os.path.join(self.source_folder, "CMakeLists.txt")
+    save(self, root_cmake, load(self, root_cmake) +
+         '\ninclude("${CMAKE_CURRENT_SOURCE_DIR}/conan-cmake/conan-integration.cmake")\n')
 
   def layout(self):
     """Defines the standard CMake layout for the project."""
@@ -129,6 +181,10 @@ class RDKitConan(ConanFile):
 
   def configure(self):
     """Configures build options and dependency flags."""
+    if self.options.with_python or self.options.with_csharp:
+      raise ConanInvalidConfiguration("Python and C# bindings are not supported by this recipe")
+    if not self.options.with_eigen:
+      raise ConanInvalidConfiguration("This recipe requires with_eigen=True")
     if self.options.shared:
       self.options.rm_safe("fPIC")
 
@@ -146,7 +202,8 @@ class RDKitConan(ConanFile):
     # <editor-fold desc="CMake Toolchain Configuration">
     tc = CMakeToolchain(self)
 
-    tc.variables["CMAKE_BUILD_TYPE"] = "Release"
+    tc.variables["CMAKE_BUILD_TYPE"] = str(self.settings.build_type)
+    tc.variables["EXECUTABLE_OUTPUT_PATH"] = os.path.join(self.build_folder, "bin").replace("\\", "/")
 
     # Normalize path separators to ensure CMake handles the install prefix correctly
     if self.package_folder:
@@ -180,10 +237,10 @@ class RDKitConan(ConanFile):
     tc.variables["RDK_BUILD_TEST_GZIP"] = "OFF"
     tc.variables["RDK_BUILD_FREESASA_SUPPORT"] = "ON"
     tc.variables["RDK_BUILD_AVALON_SUPPORT"] = "ON"
-    tc.variables["RDK_BUILD_INCHI_SUPPORT"] = "ON"
+    tc.variables["RDK_BUILD_INCHI_SUPPORT"] = bool(self.options.with_inchi)
     tc.variables["RDK_BUILD_YAEHMOP_SUPPORT"] = "ON"
     tc.variables["RDK_BUILD_XYZ2MOL_SUPPORT"] = "ON"
-    tc.variables["RDK_BUILD_CAIRO_SUPPORT"] = "ON"
+    tc.variables["RDK_BUILD_CAIRO_SUPPORT"] = bool(self.options.with_cairo)
     tc.variables["RDK_BUILD_THREADSAFE_SSS"] = "ON"
     # </editor-fold>
 
@@ -252,18 +309,18 @@ class RDKitConan(ConanFile):
 
   def requirements(self):
     """Defines the package dependencies."""
-    # Special override which is necessary because cairo and swig need this
-    # but in different minors cairo .42 and swig .43
-    self.requires("pcre2/10.43", override=True)
+    # Align Cairo and SWIG with the PCRE2 minor used by the SWIG binaries.
+    self.requires("pcre2/10.44", override=True)
     # --------------------------------------------------------------------------
-    self.requires("boost/1.89.0")
+    self.requires("boost/1.89.0", transitive_headers=True)
     self.requires("zlib/1.3.1")
     self.requires("sqlite3/3.51.0")
+    self.requires("freetype/2.15.0", transitive_headers=True)
 
     if self.options.with_cairo:
-      self.requires("cairo/1.18.0")
+      self.requires("cairo/1.18.0", transitive_headers=True)
     if self.options.with_eigen:
-      self.requires("eigen/3.4.0")
+      self.requires("eigen/3.4.0", transitive_headers=True)
     if self.options.with_python:
       self.requires("numpy/1.26.0")
 
@@ -276,8 +333,7 @@ class RDKitConan(ConanFile):
     """Builds the project using CMake."""
     cmake = CMake(self)
     cmake.configure()
-    # This cmake build command mirrors the one in the azure pipelines
-    cmake.build(cli_args=["--target", "install"])
+    cmake.build()
 
     if self.options.with_ctest:
       self._run_tests()
@@ -291,16 +347,26 @@ class RDKitConan(ConanFile):
     env.define("RDBASE", self.source_folder)
     env.define("RDBase", self.source_folder)
     env.prepend_path("PATH", f"{self.build_folder}")
+    env.prepend_path("PATH", f"{self.build_folder}/bin")
     env.prepend_path("PATH", f"{self.build_folder}/bin/Release")
+    env.prepend_path("LD_LIBRARY_PATH", os.path.join(self.build_folder, "lib"))
+    env.prepend_path("DYLD_LIBRARY_PATH", os.path.join(self.build_folder, "lib"))
 
     with env.vars(self).apply():
+      inventory = StringIO()
+      self.run(f"ctest -C {self.settings.build_type} --show-only=json-v1",
+               cwd=self.build_folder, stdout=inventory, env=None)
+      save(self, os.path.join(self.build_folder, "upstream-inventory.json"), inventory.getvalue())
       self.run(
-        "ctest -C Release --output-on-failure",
+        f"ctest -C {self.settings.build_type} --output-on-failure --no-tests=error "
+        "--output-junit upstream-tests.xml --timeout 600",
         cwd=self.build_folder,
+        env=None,
       )
 
   def package(self):
     """Packages the artifacts, reorganizing headers and binaries."""
+    CMake(self).install()
     include_src = os.path.join(self.package_folder, "include", "rdkit")
     include_dst = os.path.join(self.package_folder, "include")
     os.makedirs(include_dst, exist_ok=True)
@@ -323,113 +389,56 @@ class RDKitConan(ConanFile):
     os.makedirs(bin_dir, exist_ok=True)
 
     copy(self, "*.dll", src=lib_dir, dst=bin_dir, keep_path=False)
+    copy(self, "license.txt", src=self.source_folder,
+         dst=os.path.join(self.package_folder, "licenses"))
+    copy(self, "rdkit-components.json", src=self.build_folder,
+         dst=os.path.join(self.package_folder, "res"))
+
+    if self.options.with_java:
+      wrapper_source = os.path.join(self.source_folder, "Code", "JavaWrappers", "gmwrapper")
+      copy(self, "org.RDKit.jar", src=wrapper_source,
+           dst=os.path.join(self.package_folder, "share", "java"))
+      wrapper_build = os.path.join(self.build_folder, "Code", "JavaWrappers", "gmwrapper")
+      for pattern in ("*GraphMolWrap.dll", "*GraphMolWrap.so", "*GraphMolWrap.jnilib", "*GraphMolWrap.dylib"):
+        copy(self, pattern, src=wrapper_build, dst=bin_dir, keep_path=False)
 
   def package_info(self):
     """Defines the package information for consumers."""
     self.cpp_info.set_property("cmake_file_name", "RDKit")
 
-    # List of RDKit component libraries.
-    # Note: Some libraries (ConformerParser, rdkit_base, rdkit_py_base, yaehmop_eht)
-    # are missing from the manifest.
-    libs = [
-      "Abbreviations",
-      "Alignment",
-      "AvalonLib",
-      "avalon_clib",
-      "Catalogs",
-      "ChemDraw",
-      "ChemicalFeatures",
-      "ChemReactions",
-      "ChemTransforms",
-      "CIPLabeler",
-      "coordgen",
-      "DataStructs",
-      "Depictor",
-      "Deprotect",
-      "Descriptors",
-      "DetermineBonds",
-      "DistGeometry",
-      "DistGeomHelpers",
-      "EHTLib",
-      "EigenSolvers",
-      "EnumerateStereoisomers",
-      "FileParsers",
-      "FilterCatalog",
-      "Fingerprints",
-      "FMCS",
-      "ForceField",
-      "ForceFieldHelpers",
-      "FragCatalog",
-      "FreeSASALib",
-      "freesasa_clib",
-      "ga",
-      "GeneralizedSubstruct",
-      "GenericGroups",
-      "GraphMol",
-      "hc",
-      "Inchi",
-      "InfoTheory",
-      "maeparser",
-      "MarvinParser",
-      "MMPA",
-      "MolAlign",
-      "MolCatalog",
-      "MolChemicalFeatures",
-      "MolDraw2D",
-      "MolEnumerator",
-      "MolHash",
-      "MolInteractionFields",
-      "MolInterchange",
-      "MolProcessing",
-      "MolStandardize",
-      "MolTransforms",
-      "O3AAlign",
-      "Optimizer",
-      "PartialCharges",
-      "PubChemShape",
-      "pubchem_align3d",
-      "RascalMCES",
-      "RDChemDrawLib",
-      "RDChemDrawReactionLib",
-      "RDGeneral",
-      "RDGeometryLib",
-      "RDInchiLib",
-      "RDStreams",
-      "ReducedGraphs",
-      "RGroupDecomposition",
-      "RingDecomposerLib",
-      "ScaffoldNetwork",
-      "ShapeHelpers",
-      "SimDivPickers",
-      "SLNParse",
-      "SmilesParse",
-      "Subgraphs",
-      "SubstructLibrary",
-      "SubstructMatch",
-      "SynthonSpaceSearch",
-      "TautomerQuery",
-      "Trajectory"
-    ]
-    deps = [
-      "boost::boost",
-      "zlib::zlib",
-      "sqlite3::sqlite3",
-    ]
+    metadata = json.loads(load(self, os.path.join(self.package_folder, "res", "rdkit-components.json")))
+    installed = set(collect_libs(self))
+    # Non-Windows RDKit builds install separate *_static targets alongside shared ones.
+    use_static_suffix = not self.options.shared and self.settings.os != "Windows"
+    selected = {}
+    for target, entry in metadata.items():
+      if entry["library"] not in installed:
+        continue
+      # EHTLib embeds this private helper when the public libraries are shared.
+      if self.options.shared and target == "yaehmop_eht":
+        continue
+      is_static_variant = target.endswith("_static")
+      if is_static_variant != use_static_suffix and target.removesuffix("_static") + "_static" in metadata:
+        continue
+      selected[target] = entry
+    if not selected:
+      raise ConanInvalidConfiguration("No installed RDKit libraries found")
 
+    external = ["boost::boost", "zlib::zlib", "sqlite3::sqlite3", "freetype::freetype"]
     if self.options.with_cairo:
-      deps.append("cairo::cairo")
+      external.append("cairo::cairo")
     if self.options.with_eigen:
-      deps.append("eigen::eigen")
-    if self.options.with_python:
-      deps.append("numpy::numpy")
-
-    # Create a CMake component for each RDKit sub-library.
-    for name in libs:
-      comp = self.cpp_info.components[name]
+      external.append("eigen::eigen")
+    for target, entry in selected.items():
+      name = target.removesuffix("_static")
+      component = self.cpp_info.components[name]
+      component.libs = [entry["library"]]
+      component.set_property("cmake_target_name", f"RDKit::{name}")
+      component.requires = external + [dependency.removesuffix("_static")
+                                      for dependency in entry["requires"] if dependency in selected]
       if self.options.shared:
-        comp.libs = [f"RDKit{name}"]
-      else:
-        comp.libs = [name]
-      comp.set_property("cmake_target_name", f"RDKit::{name}")
-      # Each RDKit component depends on the common external packages.
-      comp.requires = deps.copy()
+        component.defines.append("RDKIT_DYN_LINK")
+      if self.settings.os == "Linux":
+        component.system_libs = ["pthread", "dl", "m"]
+    self.runenv_info.define_path("RDBASE", os.path.join(self.package_folder, "share", "RDKit"))
+    self.runenv_info.define_path("RDBase", os.path.join(self.package_folder, "share", "RDKit"))

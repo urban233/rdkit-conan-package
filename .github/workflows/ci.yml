@@ -1,122 +1,146 @@
-name: CI
+name: Package acceptance
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, 'feat/**']
   pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acceptance-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: '2'
+  CTEST_PARALLEL_LEVEL: '2'
 
 jobs:
-  build-windows:
-    name: Build on Windows
-    runs-on: windows-2022
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Conan and build tools
-        run: |
-          pip install --upgrade conan
-          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' --yes
-          choco install ninja --yes
-
-      - name: Set Conan home
-        run: echo "CONAN_USER_HOME=${{ runner.temp }}\conan" >> $env:GITHUB_ENV
-
-      - name: Create Conan default profile
-        run: conan profile detect --force
-
-      - name: Get the sources from GitHub
-        run: conan source
-
-      - name: Conan install
-        run: conan install . --build=missing --profile profiles/windows/release
-
-      - name: Build package
-        run: conan build . --profile profiles/windows/release
-
-  build-macos:
-    name: Build on macOS
-    runs-on: macos-14
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Conan and build tools
-        run: |
-          pip install --upgrade conan
-          brew install cmake ninja
-
-      - name: Set Conan home
-        run: echo "CONAN_USER_HOME=${{ runner.temp }}/conan" >> $GITHUB_ENV
-
-      - name: Create Conan default profile
-        run: conan profile detect --force
-
-      - name: Get the sources from GitHub
-        run: conan source
-
-      - name: Conan install
-        run: conan install . --build=missing --profile profiles/macos/release
-
-      - name: Build package
-        run: conan build . --profile profiles/macos/release
-
-  build-linux:
-    name: Build on Linux
+  validation:
+    name: Validate acceptance checks
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - run: python -m unittest discover -s ci -p 'test_*.py'
 
-      - name: Install system dependencies
+  build:
+    name: Build / ${{ matrix.os }} / ${{ matrix.variant }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-22.04, macos-15]
+        variant: [static, shared, java]
+        include:
+          - os: ubuntu-22.04
+            variant: minimal
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Restore dependency binaries
+        if: github.event_name != 'schedule'
+        uses: actions/cache/restore@v4
+        with:
+          path: artifacts/dependencies.tgz
+          key: dependencies-${{ matrix.os }}-${{ matrix.variant }}-${{ hashFiles('conanfile.py', '.github/actions/setup/action.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            dependencies-${{ matrix.os }}-${{ matrix.variant }}-${{ hashFiles('conanfile.py', '.github/actions/setup/action.yml') }}-
+            dependencies-${{ matrix.os }}-${{ matrix.variant }}-
+      - name: Prepare dependencies
+        run: python ci/run.py prepare --variant '${{ matrix.variant }}'
+      - name: Save dependency binaries before building RDKit
+        uses: actions/cache/save@v4
+        with:
+          path: artifacts/dependencies.tgz
+          key: dependencies-${{ matrix.os }}-${{ matrix.variant }}-${{ hashFiles('conanfile.py', '.github/actions/setup/action.yml') }}-${{ github.run_id }}
+      - name: Build and test package
+        run: python ci/run.py build --variant '${{ matrix.variant }}'
+      - name: Upload package for independent consumption
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.os }}-${{ matrix.variant }}
+          path: |
+            artifacts/packages.tgz
+            artifacts/reference.txt
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports-${{ matrix.os }}-${{ matrix.variant }}
+          path: |
+            artifacts/*.xml
+            artifacts/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  consume:
+    name: Consume / ${{ matrix.os }} / ${{ matrix.variant }}
+    needs: build
+    if: ${{ !cancelled() }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-22.04, macos-15]
+        variant: [static, shared, java]
+        include:
+          - os: ubuntu-22.04
+            variant: minimal
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          cache-name: relocated-consumer-cache
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-${{ matrix.os }}-${{ matrix.variant }}
+          path: artifacts
+      - name: Consume package without sources, builds, or remotes
+        run: python ci/run.py consume --variant '${{ matrix.variant }}'
+      - name: Upload consumer diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: consumer-reports-${{ matrix.os }}-${{ matrix.variant }}
+          path: |
+            artifacts/*.xml
+            artifacts/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  ci-required:
+    name: ci-required
+    if: always()
+    needs: [validation, build, consume]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Require every package and consumer job to pass
+        env:
+          VALIDATION_RESULT: ${{ needs.validation.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          CONSUME_RESULT: ${{ needs.consume.result }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build \
-            libx11-dev libx11-xcb-dev libfontenc-dev libice-dev libsm-dev \
-            libxau-dev libxaw7-dev libxcomposite-dev libxcursor-dev \
-            libxdamage-dev libxfixes-dev libxi-dev libxinerama-dev \
-            libxmu-dev libxmuu-dev libxpm-dev libxrandr-dev libxres-dev \
-            libxss-dev libxtst-dev libxv-dev libxxf86vm-dev libxcb-glx0-dev \
-            libxcb-render-util0-dev libxcb-xkb-dev libxcb-icccm4-dev \
-            libxcb-image0-dev libxcb-keysyms1-dev libxcb-randr0-dev \
-            libxcb-shape0-dev libxcb-sync-dev libxcb-xfixes0-dev \
-            libxcb-xinerama0-dev libxcb-dri3-dev libxcb-cursor-dev \
-            libxcb-dri2-0-dev libxcb-present-dev libxcb-composite0-dev \
-            libxcb-ewmh-dev libxcb-res0-dev
-
-      - name: Install Conan
-        run: pip install --upgrade conan
-
-      - name: Set Conan home
-        run: echo "CONAN_USER_HOME=${{ runner.temp }}/conan" >> $GITHUB_ENV
-
-      - name: Create Conan default profile
-        run: conan profile detect --force
-
-      - name: Get the sources from GitHub
-        run: conan source
-
-      - name: Conan install
-        run: |
-          conan install . --build=missing --profile profiles/linux/release \
-            -c tools.system.package_manager:mode=install \
-            -c tools.system.package_manager:sudo=True
-
-      - name: Build package
-        run: conan build . --profile profiles/linux/release
+          test "$VALIDATION_RESULT" = success
+          test "$BUILD_RESULT" = success
+          test "$CONSUME_RESULT" = success
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-reports-*'
+          path: acceptance-evidence
+      - name: Verify complete platform and configuration coverage
+        run: python ci/check_matrix.py acceptance-evidence
