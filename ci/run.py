@@ -118,7 +118,9 @@ def main():
             (ARTIFACTS / "reference.txt").write_text(packages[0]["ref"] + "\n")
             if minimal:
                 verify_unsupported_options(packages[0]["ref"], profiles)
-            run("conan", "list", f"--graph={graph}", "--graph-context=host-only",
+            # Offline graph resolution also needs build-tool recipes, even
+            # when --build=never prevents those tools from being executed.
+            run("conan", "list", f"--graph={graph}",
                 "--format=json", f"--out-file={ARTIFACTS / 'packages.json'}")
             run("conan", "cache", "save", f"--list={ARTIFACTS / 'packages.json'}", "--no-source",
                 f"--file={ARTIFACTS / 'packages.tgz'}")

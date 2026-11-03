@@ -21,7 +21,8 @@ The consumer jobs restore packages into a new cache on a fresh runner and repeat
 the consumer tests with `--build=never --no-remote`. The transfer archive excludes
 sources and build directories. Only packaged data files and Conan's runtime
 environment are available to the consumers. Dependencies are transferred with
-their exact recipe and binary revisions.
+their exact recipe and binary revisions, including the build-tool metadata
+Conan needs to resolve the graph offline. Consumers cannot rebuild packages.
 
 Empty test suites, missing consumer tests, failures, and skipped tests are errors.
 Upstream execution must match CTest's discovered test inventory. Native binary
