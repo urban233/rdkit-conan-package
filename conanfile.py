@@ -125,6 +125,14 @@ class RDKitConan(ConanFile):
       "#ifdef SWIGCSHARP\n%include <std_unique_ptr.i>",
       "#if defined(SWIGCSHARP) || defined(SWIGJAVA)\n%include <std_unique_ptr.i>"
     )
+    # The additional ChemDraw link must follow the same static/shared selection
+    # as the other SWIG libraries, instead of retaining a build-tree dependency.
+    replace_in_file(
+      self,
+      os.path.join(self.source_folder, "Code", "JavaWrappers", "gmwrapper", "CMakeLists.txt"),
+      "rdkit_base ${RDKit_THREAD_LIBS} ChemDraw expat)",
+      "rdkit_base ${RDKit_THREAD_LIBS} ChemDraw${swigRDKitLibSuffix} expat)"
+    )
 
     # Test entry points and the private EHT implementation are static helpers,
     # even when the public RDKit libraries are shared.

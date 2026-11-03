@@ -43,17 +43,7 @@ class PackageAcceptance(ConanFile):
         executable = Path(self.build_folder) / ("core.exe" if self.settings.os == "Windows" else "core")
         if not executable.is_file():
             executable = executable.parent / str(self.settings.build_type) / executable.name
-        if self.settings.os == "Windows":
-            command = ["dumpbin", "/DEPENDENTS", str(executable)]
-        elif self.settings.os == "Macos":
-            command = ["otool", "-L", str(executable)]
-        else:
-            command = ["readelf", "-d", str(executable)]
-        linkage = subprocess.check_output(command, text=True)
-        print(linkage)
-        has_shared_rdkit = re.search(r"(?:lib)?RDKit[^\s/]+\.(?:so|dylib|dll)", linkage) is not None
-        if has_shared_rdkit != bool(dependency.options.shared):
-            raise RuntimeError("Consumer linkage does not match the requested static/shared package")
+        self._verify_linkage(executable, bool(dependency.options.shared))
         package = Path(dependency.package_folder)
         if not (package / "licenses" / "license.txt").is_file():
             raise RuntimeError("Package is missing its license")
@@ -70,6 +60,8 @@ class PackageAcceptance(ConanFile):
             native = list((package / "bin").glob("*GraphMolWrap.*"))
             if not jar.is_file() or not native:
                 raise RuntimeError("Package is missing its Java bindings")
+            for wrapper in native:
+                self._verify_linkage(wrapper, bool(dependency.options.shared))
             def quote(path):
                 return '"' + str(path) + '"' if self.settings.os == "Windows" else shlex.quote(str(path))
             classes = Path(self.build_folder) / "java-classes"
@@ -79,3 +71,16 @@ class PackageAcceptance(ConanFile):
             classpath = str(classes) + os.pathsep + str(jar)
             self.run(f"java -Djava.library.path={quote(package / 'bin')} -cp {quote(classpath)} "
                      "PackageSmoke", env="conanrun")
+
+    def _verify_linkage(self, binary, shared):
+        if self.settings.os == "Windows":
+            command = ["dumpbin", "/DEPENDENTS", str(binary)]
+        elif self.settings.os == "Macos":
+            command = ["otool", "-L", str(binary)]
+        else:
+            command = ["readelf", "-d", str(binary)]
+        linkage = subprocess.check_output(command, text=True)
+        print(linkage)
+        has_shared_rdkit = re.search(r"(?:lib)?RDKit[^\s/]+\.(?:so|dylib|dll)", linkage) is not None
+        if has_shared_rdkit != shared:
+            raise RuntimeError(f"{binary.name} linkage does not match the requested static/shared package")
