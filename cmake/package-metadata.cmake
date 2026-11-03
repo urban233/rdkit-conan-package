@@ -35,6 +35,23 @@ function(rdkit_package_targets directory)
   endforeach()
 endfunction()
 
+# Public definitions affect class layouts in consumer headers, including the
+# mutex members of the thread-safe molecule suppliers.
+get_target_property(definitions rdkit_base INTERFACE_COMPILE_DEFINITIONS)
+set(public_definitions "")
+foreach(definition IN LISTS definitions)
+  string(REGEX REPLACE "^-D" "" definition "${definition}")
+  if(definition MATCHES "^[A-Za-z_][A-Za-z0-9_]*(=.*)?$")
+    string(REPLACE "\\" "\\\\" definition "${definition}")
+    string(REPLACE "\"" "\\\"" definition "${definition}")
+    list(APPEND public_definitions "\"${definition}\"")
+  endif()
+endforeach()
+list(REMOVE_DUPLICATES public_definitions)
+list(JOIN public_definitions "," definitions_json)
+set_property(GLOBAL APPEND PROPERTY RDKIT_PACKAGE_METADATA
+  "\"rdkit_base\":{\"library\":\"\",\"requires\":[],\"defines\":[${definitions_json}]}")
+
 rdkit_package_targets("${CMAKE_SOURCE_DIR}")
 get_property(metadata GLOBAL PROPERTY RDKIT_PACKAGE_METADATA)
 list(JOIN metadata ",\n" metadata_json)
