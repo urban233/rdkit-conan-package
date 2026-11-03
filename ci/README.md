@@ -11,7 +11,9 @@ all ten build configurations and their ten independent consumer jobs to pass:
 
 Native builds run upstream CTest tests. Every configuration builds and executes
 separate C++ consumers for SMILES parsing, canonicalization, substructure matching,
-fingerprints, conformer generation/MMFF optimization, SVG drawing, and enabled
+fingerprints, SDF/SMILES file suppliers and random access, conformer generation/MMFF
+optimization, EHT calculations using
+packaged parameter data, SVG drawing, and enabled
 Cairo/InChI features. Java builds additionally compile and run a JVM consumer using
 the packaged JAR and native wrapper. Test checks remain active in Release builds.
 

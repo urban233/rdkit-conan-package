@@ -41,7 +41,7 @@ def verify_reports(upstream, cairo, inchi):
     consumers = list(ARTIFACTS.glob("*consumer-tests.xml"))
     if not consumers:
         raise RuntimeError("No consumer test report was produced")
-    expected = {"core", "fingerprints", "conformers", "drawing"}
+    expected = {"core", "fingerprints", "suppliers", "conformers", "drawing"}
     if cairo:
         expected.add("cairo")
     if inchi:

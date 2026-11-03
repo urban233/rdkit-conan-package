@@ -126,6 +126,37 @@ class RDKitConan(ConanFile):
       "#if defined(SWIGCSHARP) || defined(SWIGJAVA)\n%include <std_unique_ptr.i>"
     )
 
+    # Test entry points and the private EHT implementation are static helpers,
+    # even when the public RDKit libraries are shared.
+    replace_in_file(
+      self, os.path.join(self.source_folder, "Code", "RDGeneral", "CMakeLists.txt"),
+      "add_library(rdkitCatch catch_main.cpp)",
+      "add_library(rdkitCatch STATIC catch_main.cpp)"
+    )
+    replace_in_file(
+      self, os.path.join(self.source_folder, "CMakeLists.txt"),
+      "FetchContent_MakeAvailable(Catch2)",
+      'set(_saved_shared_before_catch "${BUILD_SHARED_LIBS}")\n'
+      'set(BUILD_SHARED_LIBS OFF)\n'
+      'FetchContent_MakeAvailable(Catch2)\n'
+      'set(BUILD_SHARED_LIBS "${_saved_shared_before_catch}")'
+    )
+    replace_in_file(
+      self, os.path.join(self.source_folder, "External", "YAeHMOP", "CMakeLists.txt"),
+      "add_subdirectory(yaehmop/tightbind EXCLUDE_FROM_ALL True)",
+      'set(_saved_build_shared_libs "${BUILD_SHARED_LIBS}")\n'
+      'set(BUILD_SHARED_LIBS OFF)\n'
+      'add_subdirectory(yaehmop/tightbind EXCLUDE_FROM_ALL True)\n'
+      'set(BUILD_SHARED_LIBS "${_saved_build_shared_libs}")'
+    )
+    # Random-access suppliers require byte offsets; Windows text-mode streams
+    # translate line endings and invalidate the test's seek/tell positions.
+    replace_in_file(
+      self, os.path.join(self.source_folder, "Code", "GraphMol", "FileParsers", "v2_suppliers_catch.cpp"),
+      "std::ifstream inStream(fName);",
+      "std::ifstream inStream(fName, std::ios_base::binary);"
+    )
+
     copy(self, "*.cmake", src=os.path.join(self.export_sources_folder, "cmake"),
          dst=os.path.join(self.source_folder, "conan-cmake"))
     root_cmake = os.path.join(self.source_folder, "CMakeLists.txt")
@@ -374,6 +405,9 @@ class RDKitConan(ConanFile):
     selected = {}
     for target, entry in metadata.items():
       if entry["library"] not in installed:
+        continue
+      # EHTLib embeds this private helper when the public libraries are shared.
+      if self.options.shared and target == "yaehmop_eht":
         continue
       is_static_variant = target.endswith("_static")
       if is_static_variant != use_static_suffix and target.removesuffix("_static") + "_static" in metadata:

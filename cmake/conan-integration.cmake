@@ -1,3 +1,12 @@
+if(TARGET rdkitCatch)
+  target_link_libraries(rdkitCatch PUBLIC RDGeneral)
+endif()
+
+# rdkit_library() refers to a *_static variant for internal static dependencies.
+if(TARGET yaehmop_eht AND NOT TARGET yaehmop_eht_static)
+  add_library(yaehmop_eht_static ALIAS yaehmop_eht)
+endif()
+
 # The ChemDraw wrapper calls expatpp directly, including in shared builds.
 # Declare that dependency and install it even when the vendor directory uses
 # EXCLUDE_FROM_ALL. Static builds already have an upstream install rule.

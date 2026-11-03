@@ -16,7 +16,7 @@ class ReportChecks(unittest.TestCase):
         self.override.start()
         self.addCleanup(self.override.stop)
 
-    def consumer(self, extra="", names=("core", "fingerprints", "conformers", "drawing", "cairo", "inchi")):
+    def consumer(self, extra="", names=("core", "fingerprints", "suppliers", "conformers", "drawing", "cairo", "inchi")):
         cases = ''.join(f'<testcase name="{name}">{extra}</testcase>' for name in names)
         (self.artifacts / "test-consumer-tests.xml").write_text(f'<testsuite>{cases}</testsuite>')
 
