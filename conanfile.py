@@ -27,7 +27,7 @@ class RDKitConan(ConanFile):
   """
 
   name = "rdkit"
-  version = "2026.03.6"
+  version = "2026.09.1"
   license = "BSD-3-Clause"
   url = "https://github.com/rdkit/rdkit"
   description = (
@@ -100,14 +100,8 @@ class RDKitConan(ConanFile):
     replace_in_file(
       self,
       os.path.join(self.source_folder, "CMakeLists.txt"),
-      "find_package(Eigen3)\nif(RDK_BUILD_DESCRIPTORS3D)",
-      "find_package(Eigen3 REQUIRED)\nfind_package(EXPAT REQUIRED CONFIG)\nif(RDK_BUILD_DESCRIPTORS3D)"
-    )
-    replace_in_file(
-      self,
-      os.path.join(self.source_folder, "CMakeLists.txt"),
-      "if(NOT EIGEN3_FOUND)",
-      "if(NOT TARGET Eigen3::Eigen)"
+      "find_package(Eigen3 NO_MODULE)",
+      "find_package(Eigen3 REQUIRED CONFIG)\nfind_package(EXPAT REQUIRED CONFIG)"
     )
 
     # Replace the ${SWIG_USE_FILE} variable for UseSWIG to make it conan compatible
@@ -140,6 +134,18 @@ class RDKitConan(ConanFile):
       'set(BUILD_SHARED_LIBS OFF)\n'
       'FetchContent_MakeAvailable(Catch2)\n'
       'set(BUILD_SHARED_LIBS "${_saved_shared_before_catch}")'
+    )
+    # RDKit's sharded tests include CatchShardTests before adding Code/.
+    # Expose the extras from either the fetched or installed Catch2 package.
+    replace_in_file(
+      self, os.path.join(self.source_folder, "CMakeLists.txt"),
+      "include(RDKitUtils)",
+      'if(DEFINED catch2_SOURCE_DIR)\n'
+      '  list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")\n'
+      'elseif(DEFINED Catch2_DIR)\n'
+      '  list(APPEND CMAKE_MODULE_PATH "${Catch2_DIR}")\n'
+      'endif()\n'
+      'include(RDKitUtils)'
     )
     replace_in_file(
       self, os.path.join(self.source_folder, "External", "YAeHMOP", "CMakeLists.txt"),
