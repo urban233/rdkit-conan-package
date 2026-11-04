@@ -27,7 +27,7 @@ class RDKitConan(ConanFile):
   """
 
   name = "rdkit"
-  version = "2025.09.3"
+  version = "2025.09.6"
   license = "BSD-3-Clause"
   url = "https://github.com/rdkit/rdkit"
   description = (
@@ -433,6 +433,7 @@ class RDKitConan(ConanFile):
       name = target.removesuffix("_static")
       component = self.cpp_info.components[name]
       component.libs = [entry["library"]]
+      component.defines.extend(metadata["rdkit_base"]["defines"])
       component.set_property("cmake_target_name", f"RDKit::{name}")
       component.requires = external + [dependency.removesuffix("_static")
                                       for dependency in entry["requires"] if dependency in selected]
