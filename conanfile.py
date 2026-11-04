@@ -27,7 +27,7 @@ class RDKitConan(ConanFile):
   """
 
   name = "rdkit"
-  version = "2025.09.6"
+  version = "2026.03.6"
   license = "BSD-3-Clause"
   url = "https://github.com/rdkit/rdkit"
   description = (
@@ -101,7 +101,7 @@ class RDKitConan(ConanFile):
       self,
       os.path.join(self.source_folder, "CMakeLists.txt"),
       "find_package(Eigen3)\nif(RDK_BUILD_DESCRIPTORS3D)",
-      "find_package(Eigen3 REQUIRED)\nif(RDK_BUILD_DESCRIPTORS3D)"
+      "find_package(Eigen3 REQUIRED)\nfind_package(EXPAT REQUIRED CONFIG)\nif(RDK_BUILD_DESCRIPTORS3D)"
     )
     replace_in_file(
       self,
@@ -117,21 +117,13 @@ class RDKitConan(ConanFile):
       "include(${SWIG_USE_FILE})",
       "include(UseSWIG)"
     )
-    # Fix Java SWIG unique_ptr<RWMol> compilation errors.
-    # Only replace the first occurrence (unique_ptr block), not all SWIGCSHARP blocks.
-    replace_in_file(
-      self,
-      os.path.join(self.source_folder, "Code", "JavaWrappers", "ROMol.i"),
-      "#ifdef SWIGCSHARP\n%include <std_unique_ptr.i>",
-      "#if defined(SWIGCSHARP) || defined(SWIGJAVA)\n%include <std_unique_ptr.i>"
-    )
     # The additional ChemDraw link must follow the same static/shared selection
     # as the other SWIG libraries, instead of retaining a build-tree dependency.
     replace_in_file(
       self,
       os.path.join(self.source_folder, "Code", "JavaWrappers", "gmwrapper", "CMakeLists.txt"),
-      "rdkit_base ${RDKit_THREAD_LIBS} ChemDraw expat)",
-      "rdkit_base ${RDKit_THREAD_LIBS} ChemDraw${swigRDKitLibSuffix} expat)"
+      "rdkit_base ${RDKit_THREAD_LIBS} ChemDraw expatpp EXPAT::EXPAT)",
+      "rdkit_base ${RDKit_THREAD_LIBS} ChemDraw${swigRDKitLibSuffix} expatpp EXPAT::EXPAT)"
     )
 
     # Test entry points and the private EHT implementation are static helpers,
@@ -204,6 +196,8 @@ class RDKitConan(ConanFile):
 
     tc.variables["CMAKE_BUILD_TYPE"] = str(self.settings.build_type)
     tc.variables["EXECUTABLE_OUTPUT_PATH"] = os.path.join(self.build_folder, "bin").replace("\\", "/")
+    # TBB is only used by upstream test executables, never by the package.
+    tc.variables["CMAKE_DISABLE_FIND_PACKAGE_TBB"] = not bool(self.options.with_ctest)
 
     # Normalize path separators to ensure CMake handles the install prefix correctly
     if self.package_folder:
@@ -300,6 +294,8 @@ class RDKitConan(ConanFile):
     deps.set_property("cairo", "cmake_target_name", "Cairo::Cairo")
     deps.set_property("freetype", "cmake_file_name", "Freetype")
     deps.set_property("freetype", "cmake_target_name", "Freetype::Freetype")
+    deps.set_property("expat", "cmake_file_name", "EXPAT")
+    deps.set_property("expat", "cmake_target_name", "EXPAT::EXPAT")
     # Configure SWIG
     deps.set_property("swig", "cmake_file_name", "SWIG")
     deps.set_property("swig", "cmake_target_name", "SWIG::SWIG")
@@ -316,6 +312,7 @@ class RDKitConan(ConanFile):
     self.requires("zlib/1.3.1")
     self.requires("sqlite3/3.51.0")
     self.requires("freetype/2.15.0", transitive_headers=True)
+    self.requires("expat/2.9.0", transitive_headers=True)
 
     if self.options.with_cairo:
       self.requires("cairo/1.18.0", transitive_headers=True)
@@ -326,6 +323,9 @@ class RDKitConan(ConanFile):
 
   def build_requirements(self):
     """Builds the required packages."""
+    if self.options.with_ctest:
+      tbb_options = {} if self.settings.os == "Macos" else {"tbbbind": False}
+      self.test_requires("onetbb/2023.1.0", options=tbb_options)
     if self.options.with_java or self.options.with_csharp:
       self.tool_requires("swig/4.4.0")
 
@@ -424,7 +424,7 @@ class RDKitConan(ConanFile):
     if not selected:
       raise ConanInvalidConfiguration("No installed RDKit libraries found")
 
-    external = ["boost::boost", "zlib::zlib", "sqlite3::sqlite3", "freetype::freetype"]
+    external = ["boost::boost", "zlib::zlib", "sqlite3::sqlite3", "freetype::freetype", "expat::expat"]
     if self.options.with_cairo:
       external.append("cairo::cairo")
     if self.options.with_eigen:
