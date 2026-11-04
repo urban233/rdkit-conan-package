@@ -11,6 +11,7 @@ The workflow is: **build the recipe into your local Conan cache → install it i
 - [Use RDKit from C++](#use-rdkit-from-c)
 - [Build and use the Java bindings](#build-and-use-the-java-bindings)
 - [Package options](#package-options)
+- [What static means on Windows](#what-static-means-on-windows)
 - [Profiles and reproducible builds](#profiles-and-reproducible-builds)
 - [What CI verifies](#what-ci-verifies)
 - [Troubleshooting](#troubleshooting)
@@ -151,7 +152,7 @@ build\rdkit_example.exe
 
 Link the components your code uses, such as `RDKit::FileParsers`, `RDKit::Fingerprints`, `RDKit::SubstructMatch`, or `RDKit::MolDraw2D`. Their targets carry transitive libraries, include paths, and public compile definitions. See [the consumer CMake file](test_package/CMakeLists.txt) for working combinations. Avoid manually listing RDKit libraries or copying compiler definitions from another installation.
 
-For shared libraries, first create the package with `-o:h "rdkit/*:shared=True"`, then pass the same option to `conan install`. Keep the runtime environment active when launching the application.
+For shared libraries, first create the package with `-o:h "rdkit/*:shared=True"`, then pass the same option to `conan install`. Keep the runtime environment active when launching the application. Windows users should also read [what static means on Windows](#what-static-means-on-windows).
 
 ## Build and use the Java bindings
 
@@ -233,7 +234,7 @@ Set options with `-o:h "rdkit/*:option=value"` on both package creation and appl
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `shared` | `False` | Build static RDKit libraries; set `True` for shared libraries. |
+| `shared` | `False` | Build static RDKit and Boost libraries; set `True` for shared libraries. This option does not select the MSVC runtime; see [Windows linkage](#what-static-means-on-windows). |
 | `with_ctest` | `True` | Build and execute the upstream C++ tests during package creation. |
 | `with_java` | `False` | Build the Java JAR and JNI wrapper; requires JDK 17. CI tests this with `shared=False` and `with_ctest=False`. |
 | `with_cairo` | `True` | Enable Cairo drawing support. |
@@ -243,6 +244,24 @@ Set options with `-o:h "rdkit/*:option=value"` on both package creation and appl
 | `with_csharp` | `False` | C# bindings are unsupported; setting `True` is rejected. |
 
 `with_ctest=False` does not disable the separate `test_package` consumers run by `conan create`. CI also tests a Linux package with both `with_cairo=False` and `with_inchi=False`.
+
+## What static means on Windows
+
+With `-o:h "rdkit/*:shared=False"`, **RDKit and Boost are static libraries, while the tested MSVC runtime is dynamic (`/MD`)**. Library linkage and runtime linkage are separate settings.
+
+| Part | Windows static configuration tested by CI |
+| --- | --- |
+| RDKit | Static `.lib` archives; no RDKit DLLs are needed. |
+| Boost | Static `.lib` archives; no Boost DLLs are needed. The recipe explicitly makes Boost's `shared` option follow RDKit's. |
+| Other production dependencies, such as Cairo, FreeType, and zlib | Static in the default resolved CI graph. Their linkage remains controlled by their own Conan options. |
+| MSVC C/C++ runtime | Dynamic: `compiler.runtime=dynamic`, `compiler.runtime_type=Release`, corresponding to `/MD`. Microsoft runtime DLLs are still required. |
+| Java bindings | `GraphMolWrap.dll` remains a JNI DLL, with RDKit and Boost linked statically into it. |
+
+RDKit and Boost remain separate archives until the final application or JNI wrapper is linked. Use the generated `RDKit::...` CMake targets to supply the required libraries and definitions. Conan disables Boost auto-linking with `BOOST_ALL_NO_LIB`; avoid mixing in libraries or headers from a separate Boost installation.
+
+The tested C++ executable and Java wrapper import Microsoft runtime DLLs such as `MSVCP140.dll` and `VCRUNTIME140.dll`, along with Windows system DLLs. A static RDKit package therefore still has runtime DLL dependencies.
+
+Keep the application and its dependencies consistent in architecture, compatible MSVC toolchain, Release/Debug configuration, and runtime choice. **`shared=False` does not select `/MT`** (the static MSVC runtime), and `/MT` is not covered by the current CI matrix. See [Microsoft's `/MD` and `/MT` documentation](https://learn.microsoft.com/en-us/cpp/build/reference/md-mt-ld-use-run-time-library?view=msvc-170) for the runtime distinction.
 
 ## Profiles and reproducible builds
 
