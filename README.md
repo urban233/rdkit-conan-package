@@ -1,9 +1,11 @@
-# RDKit Conan Package
+# Unofficial RDKit Conan Package
 
 [![Package acceptance](https://github.com/urban233/rdkit-conan-package/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/urban233/rdkit-conan-package/actions/workflows/ci.yml)
 [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
 
-Build [RDKit](https://github.com/rdkit/rdkit) as a Conan 2 package for C++ applications, with optional Java bindings. This checkout packages **RDKit 2026.09.1**.
+This repository provides an **unofficial, community-maintained Conan 2 package** for [RDKit](https://github.com/rdkit/rdkit), supporting C++ applications and optional Java bindings. It is maintained independently of the RDKit project. This checkout packages **RDKit 2026.09.1**.
+
+RDKit maintainer Greg Landrum is aware of this package and acknowledged it in the [upstream discussion: Conan package for RDKit](https://github.com/rdkit/rdkit/discussions/8998#discussioncomment-15285999).
 
 The workflow is: **build the recipe into your local Conan cache → install it in your application → link the generated CMake targets**. Cloning the repository or downloading a GitHub release does not install a Conan binary package.
 
